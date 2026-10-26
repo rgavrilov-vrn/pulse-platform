@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pulse_platform
+    username: pulse_videoevents_app
+    password: password@pulse.ru
+  kafka:
+    bootstrap-servers: localhost:9092
+  jpa:
+    show-sql: true
+logging:
+  level:
+    root: INFO
+    ru.agroeco.pulse.videoevents: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%thread] %logger{36} - %msg%n"
+  charset:
+    console: UTF-8
+    file: UTF-8

@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://db:5432/pulse_videoevents
+    username: pulse_videoevents_app
+    password: changeit
+  kafka:
+    bootstrap-servers: kafka:9092
+logging:
+  level:
+    root: INFO
+    ru.agroeco.pulse.videoevents: INFO
