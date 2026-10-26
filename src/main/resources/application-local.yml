@@ -21,3 +21,14 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /pulse-platform
+    
+goodwan:
+  base-url: https://my.goodwan.ru/api
+  username: ${GOODWAN_USERNAME}
+  password: ${GOODWAN_PASSWORD}
+  sync:
+    enabled: true
+    interval: PT1M
+    page-size: 1000
+  devices:
+    - 9441

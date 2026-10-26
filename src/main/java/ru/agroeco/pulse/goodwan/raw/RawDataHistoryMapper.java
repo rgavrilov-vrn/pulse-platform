@@ -6,8 +6,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -15,23 +13,16 @@ public class RawDataHistoryMapper {
 
     private static final String ENDPOINT = "/data/history";
 
-    private final ObjectMapper objectMapper;
-
-    public RawDataHistoryMapper(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-    }
-
     public RawDataHistoryEntity toEntity(
-        String deviceId,
-        RawDataHistoryItem item,
-        String requestParametersJson,
-        Instant requestedAt,
-        Instant receivedAt
+            String deviceId,
+            RawDataHistoryItem item,
+            String requestParametersJson,
+            Instant requestedAt,
+            Instant receivedAt
     ) {
-        try {
-            String responseItemJson = item.responseItemJson();
+        String responseItemJson = item.responseItemJson();
 
-            return RawDataHistoryEntity.create(
+        return RawDataHistoryEntity.create(
                 deviceId,
                 item.sourceRecordId(),
                 ENDPOINT,
@@ -40,13 +31,7 @@ public class RawDataHistoryMapper {
                 requestedAt,
                 receivedAt,
                 sha256(responseItemJson)
-            );
-        } catch (JsonProcessingException e) {
-            throw new GoodWanRawMappingException(
-                "Cannot serialize GoodWAN data history item",
-                e
-            );
-        }
+        );
     }
 
     private String sha256(String value) {

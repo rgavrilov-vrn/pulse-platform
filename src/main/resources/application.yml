@@ -75,6 +75,7 @@ logging:
   level:
     root: INFO
     ru.agroeco.pulse.platform: DEBUG
+    ru.agroeco.pulse.goodwan: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE
   pattern:
@@ -83,3 +84,13 @@ logging:
     console: UTF-8
     file: UTF-8
 
+goodwan:
+  base-url: https://my.goodwan.ru/api
+  username: ${GOODWAN_USERNAME}
+  password: ${GOODWAN_PASSWORD}
+  sync:
+    enabled: true
+    interval: PT1M
+    page-size: 1000
+  devices:
+    - 9441

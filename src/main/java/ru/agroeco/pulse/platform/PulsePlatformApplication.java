@@ -7,9 +7,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Modulithic
 @EnableScheduling
-@SpringBootApplication
-public class PulseVideoEventsApplication {
+@SpringBootApplication(scanBasePackages = {
+        "ru.agroeco.pulse.platform",
+        "ru.agroeco.pulse.goodwan"
+})public class PulsePlatformApplication {
     public static void main(String[] args) {
-        SpringApplication.run(PulseVideoEventsApplication.class, args);
+        SpringApplication.run(PulsePlatformApplication.class, args);
     }
 }
