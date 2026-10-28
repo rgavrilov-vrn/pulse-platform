@@ -69,7 +69,7 @@ public class OutboxKafkaRelay {
         repository.save(event);
     }
 
-    String resolveTopic(String eventType) {
+    public String resolveTopic(String eventType) {
         if (eventType == null) {
             return properties.getDefaultTopic();
         }
