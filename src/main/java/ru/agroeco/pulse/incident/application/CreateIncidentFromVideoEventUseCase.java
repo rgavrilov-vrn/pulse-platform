@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.api.IncidentCreated;
@@ -14,6 +15,7 @@ import ru.agroeco.pulse.outbox.api.OutboxPort;
 import ru.agroeco.pulse.videoserver.api.VideoEventNormalized;
 
 @Service
+@RequiredArgsConstructor
 public class CreateIncidentFromVideoEventUseCase {
 
     public static final String INCIDENT_CREATED = "IncidentCreated";
@@ -21,16 +23,6 @@ public class CreateIncidentFromVideoEventUseCase {
     private final IncidentRepository incidentRepository;
     private final OutboxPort outboxPort;
     private final ObjectMapper objectMapper;
-
-    public CreateIncidentFromVideoEventUseCase(
-        IncidentRepository incidentRepository,
-        OutboxPort outboxPort,
-        ObjectMapper objectMapper
-    ) {
-        this.incidentRepository = incidentRepository;
-        this.outboxPort = outboxPort;
-        this.objectMapper = objectMapper;
-    }
 
     @Transactional
     public IncidentCreated handle(VideoEventNormalized event) {

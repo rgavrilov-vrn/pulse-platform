@@ -6,7 +6,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "incidents", schema = "incident")
 public class Incident {
@@ -90,69 +92,5 @@ public class Incident {
         this.occurredAt = occurredAt;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public UUID getSourceEventId() {
-        return sourceEventId;
-    }
-
-    public String getSourceEventType() {
-        return sourceEventType;
-    }
-
-    public UUID getVideoServerId() {
-        return videoServerId;
-    }
-
-    public UUID getCameraId() {
-        return cameraId;
-    }
-
-    public UUID getChannelId() {
-        return channelId;
-    }
-
-    public UUID getObjectId() {
-        return objectId;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public String getSeverity() {
-        return severity;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public Instant getOccurredAt() {
-        return occurredAt;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public Instant getClosedAt() {
-        return closedAt;
-    }
-
-    public String getResolution() {
-        return resolution;
     }
 }

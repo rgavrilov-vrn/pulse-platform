@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.api.IncidentCreated;
@@ -13,6 +14,7 @@ import ru.agroeco.pulse.outbox.api.OutboxMessage;
 import ru.agroeco.pulse.outbox.api.OutboxPort;
 
 @Service
+@RequiredArgsConstructor
 public class RouteIncidentUseCase {
 
     public static final String NOTIFICATION_REQUESTED = "NotificationRequested";
@@ -20,16 +22,6 @@ public class RouteIncidentUseCase {
     private final IncidentOrchestratorProperties properties;
     private final OutboxPort outboxPort;
     private final ObjectMapper objectMapper;
-
-    public RouteIncidentUseCase(
-        IncidentOrchestratorProperties properties,
-        OutboxPort outboxPort,
-        ObjectMapper objectMapper
-    ) {
-        this.properties = properties;
-        this.outboxPort = outboxPort;
-        this.objectMapper = objectMapper;
-    }
 
     @Transactional
     public NotificationRequested handle(IncidentCreated event) {

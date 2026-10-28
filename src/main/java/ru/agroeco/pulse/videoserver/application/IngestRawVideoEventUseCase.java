@@ -2,6 +2,7 @@ package ru.agroeco.pulse.videoserver.application;
 
 import java.time.Instant;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import ru.agroeco.pulse.videoserver.infrastructure.persistence.NormalizedVideoEv
 import ru.agroeco.pulse.videoserver.infrastructure.persistence.RawVideoEventRepository;
 
 @Service
+@RequiredArgsConstructor
 public class IngestRawVideoEventUseCase {
 
     private static final int CURRENT_PAYLOAD_VERSION = 1;
@@ -20,16 +22,6 @@ public class IngestRawVideoEventUseCase {
     private final RawVideoEventRepository rawVideoEventRepository;
     private final NormalizedVideoEventRepository normalizedVideoEventRepository;
     private final ApplicationEventPublisher eventPublisher;
-
-    public IngestRawVideoEventUseCase(
-        RawVideoEventRepository rawVideoEventRepository,
-        NormalizedVideoEventRepository normalizedVideoEventRepository,
-        ApplicationEventPublisher eventPublisher
-    ) {
-        this.rawVideoEventRepository = rawVideoEventRepository;
-        this.normalizedVideoEventRepository = normalizedVideoEventRepository;
-        this.eventPublisher = eventPublisher;
-    }
 
     @Transactional
     public VideoEventNormalized handle(RawVideoEventRequest request) {

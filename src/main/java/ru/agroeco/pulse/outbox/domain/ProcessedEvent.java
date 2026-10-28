@@ -7,8 +7,10 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.Getter;
 import ru.agroeco.pulse.outbox.infrastructure.persistence.ProcessedEventId;
 
+@Getter
 @Entity
 @Table(name = "processed_events", schema = "outbox")
 @IdClass(ProcessedEventId.class)
@@ -32,17 +34,5 @@ public class ProcessedEvent {
         this.consumerName = consumerName;
         this.eventId = eventId;
         this.processedAt = processedAt;
-    }
-
-    public String getConsumerName() {
-        return consumerName;
-    }
-
-    public UUID getEventId() {
-        return eventId;
-    }
-
-    public Instant getProcessedAt() {
-        return processedAt;
     }
 }

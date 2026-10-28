@@ -1,8 +1,8 @@
 package ru.agroeco.pulse.incidentorchestrator.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,26 +10,16 @@ import ru.agroeco.pulse.incident.api.IncidentCreated;
 import ru.agroeco.pulse.incidentorchestrator.application.RouteIncidentUseCase;
 import ru.agroeco.pulse.outbox.api.ProcessedEventPort;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class IncidentCreatedConsumer {
 
     public static final String CONSUMER_NAME = "incident-orchestrator-consumer";
 
-    private static final Logger log = LoggerFactory.getLogger(IncidentCreatedConsumer.class);
-
     private final RouteIncidentUseCase routeIncident;
     private final ProcessedEventPort processedEventPort;
     private final ObjectMapper objectMapper;
-
-    public IncidentCreatedConsumer(
-        RouteIncidentUseCase routeIncident,
-        ProcessedEventPort processedEventPort,
-        ObjectMapper objectMapper
-    ) {
-        this.routeIncident = routeIncident;
-        this.processedEventPort = processedEventPort;
-        this.objectMapper = objectMapper;
-    }
 
     @KafkaListener(
         topics = "pulse.incident.events",
