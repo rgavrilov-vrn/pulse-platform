@@ -1,10 +1,13 @@
 package ru.agroeco.pulse.videoserver.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.UUID;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.agroeco.pulse.outbox.api.OutboxMessage;
+import ru.agroeco.pulse.outbox.api.OutboxPort;
 import ru.agroeco.pulse.videoserver.api.RawVideoEventRequest;
 import ru.agroeco.pulse.videoserver.api.VideoEventNormalized;
 import ru.agroeco.pulse.videoserver.domain.NormalizedVideoEvent;
@@ -15,20 +18,24 @@ import ru.agroeco.pulse.videoserver.infrastructure.persistence.RawVideoEventRepo
 @Service
 public class IngestRawVideoEventUseCase {
 
+    public static final String VIDEO_EVENT_NORMALIZED = "VideoEventNormalized";
     private static final int CURRENT_PAYLOAD_VERSION = 1;
 
     private final RawVideoEventRepository rawVideoEventRepository;
     private final NormalizedVideoEventRepository normalizedVideoEventRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final OutboxPort outboxPort;
+    private final ObjectMapper objectMapper;
 
     public IngestRawVideoEventUseCase(
         RawVideoEventRepository rawVideoEventRepository,
         NormalizedVideoEventRepository normalizedVideoEventRepository,
-        ApplicationEventPublisher eventPublisher
+        OutboxPort outboxPort,
+        ObjectMapper objectMapper
     ) {
         this.rawVideoEventRepository = rawVideoEventRepository;
         this.normalizedVideoEventRepository = normalizedVideoEventRepository;
-        this.eventPublisher = eventPublisher;
+        this.outboxPort = outboxPort;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -82,8 +89,23 @@ public class IngestRawVideoEventUseCase {
             CURRENT_PAYLOAD_VERSION
         );
 
-        eventPublisher.publishEvent(event);
+        publishToOutbox(event);
         return event;
+    }
+
+    private void publishToOutbox(VideoEventNormalized event) {
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+            outboxPort.publish(new OutboxMessage(
+                event.eventId(),
+                VIDEO_EVENT_NORMALIZED,
+                event.eventId(),
+                payload,
+                event.occurredAt()
+            ));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize VideoEventNormalized", exception);
+        }
     }
 
     private String normalizeEventType(String rawPayload) {
