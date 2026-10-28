@@ -7,11 +7,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "goodwan")
 public record GoodWanProperties(
-    String baseUrl,
-    String username,
-    String password,
-    Sync sync,
-    List<String> devices
+        String baseUrl,
+        String username,
+        String password,
+        Sync sync,
+        List<String> devices
 ) {
 
     public GoodWanProperties {
@@ -28,7 +28,7 @@ public record GoodWanProperties(
         }
 
         if (sync == null) {
-            sync = new Sync(Duration.ofMinutes(1), 1000);
+            sync = new Sync(true, Duration.ofMinutes(1), 1000);
         }
 
         if (devices == null) {
@@ -37,8 +37,9 @@ public record GoodWanProperties(
     }
 
     public record Sync(
-        Duration interval,
-        Integer pageSize
+            boolean enabled,
+            Duration interval,
+            Integer pageSize
     ) {
 
         public Sync {

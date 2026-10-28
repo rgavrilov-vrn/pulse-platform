@@ -10,6 +10,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class GoodWanIngestionConfiguration {
 
+    static {
+        System.out.println("GOODWAN CONFIG LOADED");
+    }
+
     @Bean
     public Clock goodWanClock() {
         return Clock.systemUTC();

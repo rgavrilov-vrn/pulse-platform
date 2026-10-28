@@ -7,6 +7,9 @@ spring:
     bootstrap-servers: localhost:9092
   jpa:
     show-sql: true
+  main:
+    web-application-type: servlet
+
 logging:
   level:
     root: INFO
@@ -21,7 +24,7 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /pulse-platform
-    
+
 goodwan:
   base-url: https://my.goodwan.ru/api
   username: ${GOODWAN_USERNAME}
