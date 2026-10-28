@@ -5,7 +5,7 @@ import org.springframework.modulith.core.ApplicationModules;
 
 class ModularityTests {
 
-    private final ApplicationModules modules = ApplicationModules.of(PulsePlatformApplication.class);
+    private final ApplicationModules modules = ApplicationModules.of(PulseApplication.class);
 
     @Test
     void verifiesModuleBoundaries() {

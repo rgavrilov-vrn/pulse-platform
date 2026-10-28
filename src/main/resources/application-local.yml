@@ -9,13 +9,15 @@ spring:
     show-sql: true
   main:
     web-application-type: servlet
-
+  output:
+    ansi:
+      enabled: always
 logging:
   level:
     root: INFO
     ru.agroeco.pulse.platform: DEBUG
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%thread] %logger{36} - %msg%n"
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} --- [%t] %clr(%logger{36}){cyan} : %m%n%wEx"
   charset:
     console: UTF-8
     file: UTF-8
