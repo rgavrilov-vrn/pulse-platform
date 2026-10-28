@@ -4,7 +4,7 @@ import org.springframework.modulith.ApplicationModule;
 
 @ApplicationModule(
     displayName = "Incident Management",
-    allowedDependencies = {"platform", "auth", "refs", "audit", "outbox"}
+    allowedDependencies = {"platform", "auth", "refs", "audit", "outbox", "videoserver"}
 )
 public interface IncidentModule {
 }
