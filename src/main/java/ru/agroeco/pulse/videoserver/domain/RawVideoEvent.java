@@ -1,10 +1,13 @@
 package ru.agroeco.pulse.videoserver.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "raw_video_events", schema = "videoserver")
@@ -23,6 +26,8 @@ public class RawVideoEvent {
 
     private String source;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "raw_payload", columnDefinition = "jsonb")
     private String rawPayload;
 
     private Instant ingestedAt;
