@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventRepositor
 import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
 
 @Component
+@EnableConfigurationProperties(OutboxKafkaProperties.class)
 public class OutboxKafkaRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxKafkaRelay.class);
