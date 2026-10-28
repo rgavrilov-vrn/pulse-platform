@@ -11,8 +11,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.outbox.domain.OutboxEvent;
-import ru.agroeco.pulse.outbox.infrastructure.persistence.OutboxEventRepository;
+import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventEntity;
+import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventRepository;
+import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
 
 @Component
 public class OutboxKafkaRelay {
@@ -36,24 +37,25 @@ public class OutboxKafkaRelay {
     @Scheduled(fixedDelayString = "${pulse.outbox.relay-interval-ms:5000}")
     @Transactional
     public void relayPendingEvents() {
-        List<OutboxEvent> events = repository
-            .findTop50ByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(
-                OutboxEvent.Status.NEW.name(),
-                Instant.now()
-            );
+        List<OutboxEventEntity> events = repository.lockPending(
+            Instant.now(),
+            properties.getBatchSize()
+        );
 
-        for (OutboxEvent event : events) {
+        for (OutboxEventEntity event : events) {
             publish(event);
         }
     }
 
-    private void publish(OutboxEvent event) {
+    private void publish(OutboxEventEntity event) {
         try {
             String topic = resolveTopic(event.getEventType());
             kafkaTemplate.send(topic, event.getEntityId().toString(), event.getPayload())
                 .get(10, TimeUnit.SECONDS);
 
-            event.markSent(Instant.now());
+            event.setStatus(OutboxStatus.SENT);
+            event.setPublishedAt(Instant.now());
+            event.setLastError(null);
             repository.save(event);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -63,9 +65,19 @@ public class OutboxKafkaRelay {
         }
     }
 
-    private void fail(OutboxEvent event, String error) {
+    private void fail(OutboxEventEntity event, String error) {
         log.warn("Failed to publish outbox event {}: {}", event.getId(), error);
-        event.markFailed(properties.getMaxAttempts(), Instant.now(), error);
+
+        event.setAttempts(event.getAttempts() + 1);
+        event.setLastError(error);
+
+        if (event.getAttempts() >= properties.getMaxAttempts()) {
+            event.setStatus(OutboxStatus.FAILED);
+        } else {
+            long backoffSeconds = (long) Math.pow(2, event.getAttempts());
+            event.setNextAttemptAt(Instant.now().plusSeconds(backoffSeconds));
+        }
+
         repository.save(event);
     }
 

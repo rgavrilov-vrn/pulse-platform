@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
 import ru.agroeco.pulse.outbox.infrastructure.kafka.OutboxKafkaProperties;
 import ru.agroeco.pulse.outbox.infrastructure.kafka.OutboxKafkaRelay;
-import ru.agroeco.pulse.outbox.infrastructure.persistence.OutboxEventRepository;
+import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventRepository;
 
 class OutboxTopicResolverTest {
 
