@@ -1,10 +1,14 @@
 package ru.agroeco.pulse.auth.adapter.http;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -32,7 +36,35 @@ public class AuthController {
 
     @PostMapping("/token")
     @Operation(summary = "Issue JWT access token")
-    public ResponseEntity<TokenResponse> token(@Valid @RequestBody TokenRequest request) {
+    public ResponseEntity<TokenResponse> token(
+
+            // ВАЖНО: это swagger-аннотация, НЕ org.springframework.web.bind.annotation.RequestBody.
+            // На одном параметре их должно быть ДВЕ — Spring'у для биндинга, springdoc'у для документации.
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "Учётные данные",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = TokenRequest.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "admin",
+                                            summary = "Administrator (login = password)",
+                                            value = "{\"username\":\"admin\",\"password\":\"admin\"}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "operator",
+                                            summary = "Operator",
+                                            value = "{\"username\":\"operator\",\"password\":\"operator\"}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "viewer",
+                                            summary = "Read-only viewer",
+                                            value = "{\"username\":\"viewer\",\"password\":\"viewer\"}"
+                                    )
+                            }
+                    )
+            )@Valid @RequestBody TokenRequest request) {
         try {
             var authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
