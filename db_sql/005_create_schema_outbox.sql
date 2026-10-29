@@ -1,20 +1,26 @@
+-- 005_create_schema_outbox.sql
+-- FIX: добавлены CHECK-констрейнты на status и attempts (по аналогии
+--      с incident.source_events и incident.report_jobs).
 
 CREATE SCHEMA IF NOT EXISTS outbox;
 
 CREATE TABLE IF NOT EXISTS outbox.outbox_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type VARCHAR(100) NOT NULL,
     entity_id UUID NOT NULL,
     payload JSONB NOT NULL,
-    status VARCHAR (20) NOT NULL DEFAULT 'NEW',
+    status VARCHAR(20) NOT NULL DEFAULT 'NEW',
     attempts INT NOT NULL DEFAULT 0,
     next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_at TIMESTAMPTZ,
     last_error TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_outbox_events_status   CHECK (status IN ('NEW', 'PUBLISHED', 'FAILED', 'DEAD')),
+    CONSTRAINT chk_outbox_events_attempts CHECK (attempts >= 0)
     );
 
-CREATE INDEX IF NOT EXISTS ix_outbox_events_status_next_attempt ON outbox.outbox_events(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS ix_outbox_events_status_next_attempt
+    ON outbox.outbox_events (status, next_attempt_at);
 
 CREATE TABLE IF NOT EXISTS outbox.processed_events
 (
@@ -38,7 +44,7 @@ COMMENT ON COLUMN outbox.outbox_events.event_type      IS 'Тип события
 COMMENT ON COLUMN outbox.outbox_events.entity_id       IS 'Идентификатор сущности-агрегата, породившей событие';
 COMMENT ON COLUMN outbox.outbox_events.payload         IS 'Тело события (JSONB)';
 COMMENT ON COLUMN outbox.outbox_events.status          IS 'Статус: NEW / PUBLISHED / FAILED / DEAD';
-COMMENT ON COLUMN outbox.outbox_events.attempts        IS 'Количество попыток публикации';
+COMMENT ON COLUMN outbox.outbox_events.attempts        IS 'Количество попыток публикации (>= 0)';
 COMMENT ON COLUMN outbox.outbox_events.next_attempt_at IS 'Момент следующей попытки (для retry/backoff)';
 COMMENT ON COLUMN outbox.outbox_events.published_at    IS 'Момент успешной публикации (null, пока не опубликовано)';
 COMMENT ON COLUMN outbox.outbox_events.last_error      IS 'Текст последней ошибки публикации';

@@ -2,19 +2,14 @@
 -- 007_create_schema_videoserver.sql
 -- -----------------------------------------------------------------------------
 -- Домен видео: серверы, камеры, каналы, события.
--- Зависимости: ref.objects, ref.zones (миграция 006).
--- С incident — связь только в рантайме (через incident.context_refs), SQL-FK нет.
+-- Зависимости: ref.objects, ref.zones (006).
 --
--- Структура video_servers и cameras объединена: расширенная из ref + runtime.
--- object_id/zone_id в cameras — nullable, без FK на ref (независимость видео-домена от ref).
---
--- ИЗМЕНЕНИЯ vs предыдущей версии:
---   * убран COMMENT ON COLUMN videoserver.video_servers.video_server_id
---     (колонки не существует);
---   * добавлен COMMENT ON COLUMN videoserver.cameras.video_server_id;
---   * удалён дублирующий partial unique index на cameras
---     (uq_cameras_source_external_nonnull) — его роль выполняет
---     CONSTRAINT uq_cameras_source_external UNIQUE (source, external_id).
+-- FIX: uq_cameras_source_external заменён на частичный уникальный индекс
+--      WHERE external_id IS NOT NULL. Старый UNIQUE (source, external_id)
+--      не защищал от дублирования при NULL external_id (NULL != NULL в PG),
+--      что противоречило комментарию о «выполняет роль partial unique index».
+-- FIX: удалён избыточный idx_norm_events_raw — он дублировал btree-индекс,
+--      автоматически созданный UNIQUE(raw_event_id).
 -- =============================================================================
 
 CREATE SCHEMA IF NOT EXISTS videoserver;
@@ -47,9 +42,14 @@ CREATE TABLE IF NOT EXISTS videoserver.cameras (
     status          VARCHAR(32),
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_cameras_source_external UNIQUE (source, external_id)
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+-- FIX: частичный UNIQUE вместо обычного UNIQUE (source, external_id),
+--      чтобы уникальность работала при external_id IS NOT NULL.
+--      Камеры без external_id (ручные) могут дублироваться по source — это ок.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cameras_source_external_notnull
+    ON videoserver.cameras (source, external_id) WHERE external_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS videoserver.channels (
                                                     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,7 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_raw_video_events_channel     ON videoserver.raw_v
 CREATE INDEX IF NOT EXISTS idx_norm_events_event_type       ON videoserver.normalized_video_events (event_type);
 CREATE INDEX IF NOT EXISTS idx_norm_events_camera_occurred  ON videoserver.normalized_video_events (camera_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_norm_events_server_occurred  ON videoserver.normalized_video_events (video_server_id, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_norm_events_raw              ON videoserver.normalized_video_events (raw_event_id);
+-- FIX: idx_norm_events_raw удалён — UNIQUE(raw_event_id) уже создаёт btree-индекс.
 CREATE INDEX IF NOT EXISTS idx_norm_events_channel_occurred ON videoserver.normalized_video_events (channel_id, occurred_at);
 
 -- -----------------------------------------------------------------------------
@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_norm_events_channel_occurred ON videoserver.norma
 -- -----------------------------------------------------------------------------
 COMMENT ON SCHEMA videoserver IS 'Домен видео: серверы, камеры, каналы, входящие и нормализованные события.';
 
-COMMENT ON TABLE  videoserver.video_servers IS 'Серверы видео (VMS). Объединено из ref.video_servers (расширенная структура) и videoserver.video_servers (runtime).';
+COMMENT ON TABLE  videoserver.video_servers IS 'Серверы видео (VMS).';
 COMMENT ON COLUMN videoserver.video_servers.object_id       IS 'Объект (nullable, без FK на ref.objects)';
 COMMENT ON COLUMN videoserver.video_servers.source      IS 'Код источника (совпадает с RawVideoEventRequest.source)';
 COMMENT ON COLUMN videoserver.video_servers.external_id IS 'ID сервера во внешней системе';

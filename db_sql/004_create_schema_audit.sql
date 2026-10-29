@@ -1,10 +1,13 @@
--- 003_create_schema_audit.sql
+-- 004_create_schema_audit.sql
+-- FIX: заголовок приведён к фактическому номеру файла (было -- 003_...).
+-- FIX: добавлена заметка о необходимости автоматического создания партиций.
+-- Зависит от auth.users (003).
 
 CREATE SCHEMA IF NOT EXISTS audit;
 
 CREATE TABLE IF NOT EXISTS audit.audit_log (
-    id BIGSERIAL,
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                               id BIGSERIAL,
+                                               occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     actor_id UUID REFERENCES auth.users(id),
     action VARCHAR(100) NOT NULL,
     entity_schema VARCHAR(100) NOT NULL,
@@ -23,6 +26,11 @@ CREATE TABLE IF NOT EXISTS audit.audit_log_default PARTITION OF audit.audit_log 
 
 CREATE INDEX IF NOT EXISTS ix_audit_log_entity ON audit.audit_log (entity_schema, entity_table, entity_id);
 CREATE INDEX IF NOT EXISTS ix_audit_log_occurred_at ON audit.audit_log (occurred_at DESC);
+
+-- FIX: заметка о будущих партициях.
+-- В продакшене рекомендуется pg_partman либо ежегодная миграция,
+-- создающая партицию на следующий год. Иначе все записи вне диапазона
+-- попадут в audit_log_default, что ухудшает partition pruning.
 
 -- -----------------------------------------------------------------------------
 -- Комментарии

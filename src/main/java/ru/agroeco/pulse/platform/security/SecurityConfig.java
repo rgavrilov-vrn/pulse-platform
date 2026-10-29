@@ -76,8 +76,8 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
-                        .requestMatchers(
-                                "/api/admin/**").hasAuthority("user:manage")
+//                        .requestMatchers(
+//                                "/api/admin/**").hasAuthority("user:manage")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) -> {

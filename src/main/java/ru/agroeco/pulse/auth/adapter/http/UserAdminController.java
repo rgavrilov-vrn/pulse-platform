@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.security;
+package ru.agroeco.pulse.auth.adapter.http;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -10,11 +10,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import ru.agroeco.pulse.platform.adapter.persistence.security.RoleRepository;
-import ru.agroeco.pulse.platform.adapter.persistence.security.UserEntity;
-import ru.agroeco.pulse.platform.adapter.persistence.security.UserRepository;
-import ru.agroeco.pulse.platform.adapter.persistence.security.UserRoleEntity;
-import ru.agroeco.pulse.platform.adapter.persistence.security.UserRoleId;
+import ru.agroeco.pulse.auth.adapter.persistence.RoleRepository;
+import ru.agroeco.pulse.auth.adapter.persistence.UserRepository;
+import ru.agroeco.pulse.auth.domain.UserEntity;
+import ru.agroeco.pulse.auth.domain.UserRoleEntity;
+import ru.agroeco.pulse.auth.domain.UserRoleId;
+import ru.agroeco.pulse.auth.security.AppPrincipal;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
 
 import java.nio.charset.StandardCharsets;
@@ -25,7 +26,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('user:manage')")
 public class UserAdminController {
 
     private final UserRepository users;
@@ -33,13 +33,13 @@ public class UserAdminController {
     private final PasswordEncoder encoder;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('user:write') and hasAuthority('user:assign_role')")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
     public UserView create(@Valid @RequestBody CreateUser request) {
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new IllegalArgumentException("Password exceeds BCrypt byte limit");
         }
-
         if (users.existsByLoginIgnoreCase(request.username())) {
             throw new IllegalArgumentException("User already exists");
         }
@@ -53,11 +53,11 @@ public class UserAdminController {
 
         var managedUser = users.save(user);
         assignRoles(managedUser, request.roles());
-
         return view(managedUser);
     }
 
     @PutMapping("/{id}/roles")
+    @PreAuthorize("hasAuthority('user:assign_role')")
     @Transactional
     public UserView changeRoles(
             @PathVariable UUID id,
@@ -68,74 +68,41 @@ public class UserAdminController {
                 && principal.id().equals(id)) {
             throw new IllegalArgumentException("Self role changes are not allowed");
         }
-
         var user = users.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found"));
-
-        user.getRoles().clear();
         assignRoles(user, request.roles());
-
         return view(users.saveAndFlush(user));
     }
 
     private void assignRoles(UserEntity user, Set<String> roleCodes) {
         var newRoles = new HashSet<UserRoleEntity>();
-
         for (String roleCode : roleCodes) {
             var role = roles.findByCodeIgnoreCase(roleCode)
                     .orElseThrow(() -> new NotFoundException("Role not found: " + roleCode));
-
-            var userRole = UserRoleEntity.builder()
+            newRoles.add(UserRoleEntity.builder()
                     .id(new UserRoleId(user.getId(), role.getId()))
                     .user(user)
                     .role(role)
-                    .build();
-
-            newRoles.add(userRole);
+                    .build());
         }
-
         user.getRoles().clear();
         user.getRoles().addAll(newRoles);
     }
 
     private UserView view(UserEntity user) {
         var roleCodes = user.getRoles().stream()
-                .map(userRole -> userRole.getRole().getCode())
+                .map(ur -> ur.getRole().getCode())
                 .collect(java.util.stream.Collectors.toSet());
-
-        return new UserView(
-                user.getId(),
-                user.getLogin(),
-                user.isActive(),
-                roleCodes
-        );
+        return new UserView(user.getId(), user.getLogin(), user.isActive(), roleCodes);
     }
 
     public record CreateUser(
-            @NotBlank
-            @Size(max = 100)
-            String username,
+            @NotBlank @Size(max = 100) String username,
+            @NotBlank @Size(min = 16, max = 72) String password,
+            @NotEmpty Set<@NotBlank String> roles
+    ) {}
 
-            @NotBlank
-            @Size(min = 16, max = 72)
-            String password,
+    public record ChangeRoles(@NotEmpty Set<@NotBlank String> roles) {}
 
-            @NotEmpty
-            Set<@NotBlank String> roles
-    ) {
-    }
-
-    public record ChangeRoles(
-            @NotEmpty
-            Set<@NotBlank String> roles
-    ) {
-    }
-
-    public record UserView(
-            UUID id,
-            String username,
-            boolean enabled,
-            Set<String> roles
-    ) {
-    }
+    public record UserView(UUID id, String username, boolean enabled, Set<String> roles) {}
 }

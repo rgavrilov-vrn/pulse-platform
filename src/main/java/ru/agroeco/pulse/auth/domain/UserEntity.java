@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.adapter.persistence.security;
+package ru.agroeco.pulse.auth.domain;
 
 import jakarta.persistence.*;
 import lombok.*;

@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.security;
+package ru.agroeco.pulse.auth.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;

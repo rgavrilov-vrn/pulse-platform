@@ -1,21 +1,16 @@
 -- =============================================================================
--- 002_create_schema_incident.sql
+-- 007_create_schema_incident.sql
+-- FIX: заголовок приведён к фактическому номеру файла (было -- 002_...).
+-- FIX: version DEFAULT 1 → DEFAULT 0 — согласовано с Hibernate @Version seed=0
+--      и с CHECK (version >= 0).
+-- FIX: добавлены комментарии к source_events.external_event_id / idempotency_key.
 -- -----------------------------------------------------------------------------
 -- Инцидент — корневая доменно-нейтральная сущность.
 -- НЕ содержит полей о месте, камере, сервере, сотруднике, отделе и т.п.
 -- Доменные привязки — через incident.context_refs.
 --
--- Справочники инцидента (категории нарушений, чек-листы, переходы статусов)
--- живут в этой же схеме: они часть домена инцидентов, а не общий reference data.
---
--- Зависимости: только auth.users (миграция 001) + SYSTEM user (003).
--- Порядок миграций: 001 → 003 → 002 → 006 → 007.
---
--- ИЗМЕНЕНИЯ vs предыдущей версии:
---   * Нативные enum-типы (creation_mode, status_type, severity_type, ...)
---     заменены на VARCHAR(32) + CHECK-констрейнты (совместимость с
---     Hibernate @Enumerated(EnumType.STRING), упрощение миграций).
---   * chk_incidents_version: > 0 → >= 0 (Hibernate @Version seed = 0).
+-- Зависимости: auth.users (003) + incident.sources seed.
+-- Порядок: 003 (auth) → 007 (incident).
 -- =============================================================================
 
 CREATE SCHEMA IF NOT EXISTS incident;
@@ -55,7 +50,8 @@ INSERT INTO incident.sources(code, name) VALUES
 CREATE TABLE IF NOT EXISTS incident.incidents (
                                                   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     number VARCHAR(30) NOT NULL UNIQUE,
-    version INTEGER NOT NULL DEFAULT 1,
+    -- FIX: DEFAULT 0 вместо 1 — согласовано с Hibernate @Version seed=0.
+    version INTEGER NOT NULL DEFAULT 0,
     source VARCHAR(64) NOT NULL REFERENCES incident.sources(code),
     creation_mode VARCHAR(32) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
@@ -109,7 +105,7 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- Триггеры — с условным DROP, чтобы не было NOTICE при первом прогоне
+-- Триггеры
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -144,7 +140,7 @@ CREATE TRIGGER trg_set_incident_number
     FOR EACH ROW EXECUTE FUNCTION incident.set_incident_number();
 
 -- -----------------------------------------------------------------------------
--- context_refs — ссылки на доменные сущности
+-- context_refs
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS incident.context_refs (
                                                      incident_id          UUID NOT NULL REFERENCES incident.incidents(id) ON DELETE CASCADE,
@@ -211,7 +207,7 @@ CREATE TABLE IF NOT EXISTS incident.status_transitions (
     );
 
 -- -----------------------------------------------------------------------------
--- incident_checklist_items — снапшот чек-листа инцидента
+-- incident_checklist_items
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS incident.incident_checklist_items (
                                                                  incident_id            UUID NOT NULL REFERENCES incident.incidents(id) ON DELETE RESTRICT,
@@ -450,7 +446,7 @@ COMMENT ON COLUMN incident.checklist_items.category_id      IS 'Категори
 COMMENT ON COLUMN incident.checklist_items.default_severity IS 'Серьёзность по умолчанию';
 COMMENT ON COLUMN incident.checklist_items.comment_template IS 'Шаблон комментария по умолчанию';
 
-COMMENT ON TABLE  incident.status_transitions IS 'Матрица разрешённых переходов статусов инцидента (перенесено из ref.status_transitions).';
+COMMENT ON TABLE  incident.status_transitions IS 'Матрица разрешённых переходов статусов инцидента.';
 COMMENT ON COLUMN incident.status_transitions.from_status IS 'Из какого статуса';
 COMMENT ON COLUMN incident.status_transitions.to_status   IS 'В какой статус';
 
@@ -461,8 +457,9 @@ COMMENT ON COLUMN incident.incident_checklist_items.category_name_snapshot IS '�
 
 COMMENT ON TABLE  incident.source_events IS 'Входящие события источников (до/после обработки).';
 COMMENT ON COLUMN incident.source_events.source             IS 'Код источника (FK на incident.sources)';
-COMMENT ON COLUMN incident.source_events.external_event_id  IS 'ID события во внешней системе (для идемпотентности)';
-COMMENT ON COLUMN incident.source_events.idempotency_key    IS 'Ключ идемпотентности (альтернатива external_event_id)';
+-- FIX: явно разведены семантики двух ключей дедупликации.
+COMMENT ON COLUMN incident.source_events.external_event_id  IS 'Натуральный ID события во внешней системе (для дедупликации, если есть)';
+COMMENT ON COLUMN incident.source_events.idempotency_key    IS 'Клиентский ключ идемпотентности (альтернатива external_event_id при at-least-once доставке)';
 COMMENT ON COLUMN incident.source_events.incident_id        IS 'Созданный инцидент (null, пока не обработано)';
 COMMENT ON COLUMN incident.source_events.processing_status  IS 'RECEIVED / PROCESSED / FAILED / DUPLICATE';
 COMMENT ON COLUMN incident.source_events.retry_count        IS 'Количество попыток обработки';

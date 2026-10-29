@@ -1,23 +1,23 @@
 -- =============================================================================
--- 004_create_schema_auth.sql
+-- 003_create_schema_auth.sql
+-- FIX: заголовок приведён к фактическому номеру файла (было -- 004_...).
 -- -----------------------------------------------------------------------------
 -- Аутентификация и авторизация (auth schema) + seed-данные:
 --   * admin user + role ADMIN;
---   * system user (id=00000000-0000-0000-0000-000000000001) — исполнитель
---     автоматических действий (created_by/updated_by для INTEGRATION-инцидентов).
+--   * system user (id=00000000-0000-0000-0000-000000000001).
 --
--- System user:
---   * login     = '__system__'  (не совпадает с человеческими логинами);
---   * password  = '!'           (locked-аккаунт: BCryptPasswordEncoder.matches()
---                                вернёт false для не-bcrypt хеша, не падая);
---   * is_active = TRUE          (аккаунт «активен» для attribution и отчётов,
---                                но войти под ним невозможно из-за locked password).
---   * id синхронизирован с CreateIncidentFromVideoEventUseCase.SYSTEM_USER_ID.
---
--- Порядок миграций: 001 (foundation) → 004 (auth + seeds) → 002 (incident)
---                    → 006 (ref) → 007 (videoserver).
---   auth должен существовать ДО 002, потому что incident.incidents.created_by
---   ссылается на auth.users(id).
+-- FIX: блок «Порядок миграций» приведён в соответствие реальным именам файлов.
+-- Порядок исполнения по именам файлов (алфавитный) корректен:
+--   001_create_database
+--   → 002_init_schemas
+--   → 003_create_schema_auth
+--   → 004_create_schema_audit   (зависит от auth.users)
+--   → 005_create_schema_outbox
+--   → 006_create_schema_refs
+--   → 007_create_schema_incident (зависит от auth.users + incident.sources seed)
+--   → 007_create_schema_videoserver (зависит от ref.*)
+--   → 008_create_schema_goodwan
+--   → 020_permissions
 -- =============================================================================
 
 CREATE SCHEMA IF NOT EXISTS auth;
@@ -57,13 +57,7 @@ CREATE TABLE IF NOT EXISTS auth.user_roles (
 -- -----------------------------------------------------------------------------
 -- Seed: admin user
 -- -----------------------------------------------------------------------------
-INSERT INTO auth.users (
-    login,
-    password_hash,
-    display_name,
-    email,
-    is_active
-)
+INSERT INTO auth.users (login, password_hash, display_name, email, is_active)
 VALUES (
            'admin',
            '$2b$12$90RI9oyUR3E4cf8gmNukBe4RJjVOrOH6SzOIlN0ACDetEzbZA2hNW',
@@ -73,12 +67,10 @@ VALUES (
        )
     ON CONFLICT (login) DO NOTHING;
 
--- Роль ADMIN
 INSERT INTO auth.roles (code, name, description)
 VALUES ('ADMIN', 'Administrator', 'Full administrative access')
     ON CONFLICT (code) DO NOTHING;
 
--- Назначить ADMIN пользователю admin
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -87,7 +79,7 @@ WHERE u.login = 'admin'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
 -- -----------------------------------------------------------------------------
--- Seed: SYSTEM user (для INTEGRATION-инцидентов)
+-- Seed: SYSTEM user
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -96,14 +88,7 @@ BEGIN
         WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
     ) THEN
         INSERT INTO auth.users (
-            id,
-            login,
-            password_hash,
-            display_name,
-            email,
-            is_active,
-            created_at,
-            updated_at
+            id, login, password_hash, display_name, email, is_active, created_at, updated_at
         ) VALUES (
             '00000000-0000-0000-0000-000000000001'::uuid,
             '__system__',

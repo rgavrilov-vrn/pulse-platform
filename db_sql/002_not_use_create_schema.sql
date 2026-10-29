@@ -1,6 +1,16 @@
--- 002_create_schema.sql
+-- 002_not_use_create_schema.sql
+-- FIX: файл оставлен в наборе, но полностью заблокирован.
+-- Реальная схема incident.* живёт в 007_create_schema_incident.sql.
+-- Лучшая практика — удалить этот файл из каталога миграций; guard оставлен
+-- на случай, если файл уже попал в историю миграций в чьём-то окружении.
 
-
+DO $$
+BEGIN
+    RAISE EXCEPTION
+        'OBSOLETE MIGRATION 002_not_use_create_schema.sql must not be applied. '
+        'Use 007_create_schema_incident.sql instead. '
+        'Delete this file from the migrations directory.';
+END $$;
 
 CREATE SCHEMA IF NOT EXISTS incident;
 

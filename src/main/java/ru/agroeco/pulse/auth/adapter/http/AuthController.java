@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.security;
+package ru.agroeco.pulse.auth.adapter.http;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,14 +10,14 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
+import ru.agroeco.pulse.auth.security.AppPrincipal;
 import ru.agroeco.pulse.platform.application.dto.TokenRequest;
 import ru.agroeco.pulse.platform.application.dto.TokenResponse;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticated;
-import ru.agroeco.pulse.platform.domain.event.UserAuthenticationFailed;
+import ru.agroeco.pulse.platform.security.JwtService;
+import ru.agroeco.pulse.auth.application.LoginAuditService;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
