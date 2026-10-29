@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.agroeco.pulse.incident.adapter.persistence.IncidentRepository;
 import ru.agroeco.pulse.incident.api.IncidentCreated;
 import ru.agroeco.pulse.incident.domain.*;
-import ru.agroeco.pulse.incident.infrastructure.persistence.IncidentContextRefRepository;
-import ru.agroeco.pulse.incident.infrastructure.persistence.IncidentRepository;
+import ru.agroeco.pulse.incident.adapter.persistence.IncidentContextRefRepository;
 import ru.agroeco.pulse.outbox.api.OutboxMessage;
 import ru.agroeco.pulse.outbox.api.OutboxPort;
 import ru.agroeco.pulse.videoserver.api.EventSeverity;
@@ -45,17 +45,18 @@ public class CreateIncidentFromVideoEventUseCase {
         UUID incidentId = UUID.randomUUID();
         Instant now = Instant.now();
 
-        Incident incident = new Incident(
-                incidentId,
-                SOURCE_VIDEOSERVER,
-                IncidentCreationMode.INTEGRATION,
-                IncidentStatus.RECORDED,
-                mapSeverity(event.severity()),
-                event.occurredAt(),
-                now,
-                now,
-                SYSTEM_USER_ID   // было null — нарушало NOT NULL created_by
-        );
+        IncidentEntity incident = IncidentEntity.builder()
+                .id(incidentId)                 // или null — @PrePersist проставит
+                .source(SOURCE_VIDEOSERVER)
+                .creationMode(IncidentCreationMode.INTEGRATION)
+                .status(IncidentStatus.RECORDED)
+                .severity(IncidentSeverity.MEDIUM)
+                .eventTime(event.occurredAt())
+                .receivedAt(now)
+                .createdBy(SYSTEM_USER_ID)
+                .updatedBy(SYSTEM_USER_ID)
+                .build();
+
         // saveAndFlush — чтобы @Generated(number) заполнился до возврата
         incidentRepository.saveAndFlush(incident);
 

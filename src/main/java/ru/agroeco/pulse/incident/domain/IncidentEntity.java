@@ -1,28 +1,30 @@
 package ru.agroeco.pulse.incident.domain;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
-@Getter
 @Entity
 @Table(name = "incidents", schema = "incident")
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Incident {
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class IncidentEntity {
 
     @Id
     private UUID id;
 
+    /** Генерируется триггером set_incident_number — Hibernate вставляет NULL,
+     *  после INSERT читает значение из БД. */
     @Generated(event = EventType.INSERT)
-    @Column(name = "number", nullable = false, insertable = false, updatable = false, length = 30)
+    @Column(name = "number", insertable = false, updatable = false, length = 30)
     private String number;
 
     @Version
@@ -50,13 +52,15 @@ public class Incident {
     @Column(name = "received_at")
     private Instant receivedAt;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "created_by")
+    @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
     @Column(name = "updated_by")
@@ -83,7 +87,7 @@ public class Incident {
     @Column(name = "closed_by")
     private UUID closedBy;
 
-    @Column(name = "resolution_comment")
+    @Column(name = "resolution_comment", columnDefinition = "text")
     private String resolutionComment;
 
     @Column(name = "cancelled_at")
@@ -92,36 +96,19 @@ public class Incident {
     @Column(name = "cancelled_by")
     private UUID cancelledBy;
 
-    @Column(name = "cancellation_reason")
+    @Column(name = "cancellation_reason", columnDefinition = "text")
     private String cancellationReason;
 
-    @Column(name = "comment")
+    @Column(columnDefinition = "text")
     private String comment;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
-    private String metadata = "{}";
+    @Column(nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> metadata;
 
-    public Incident(
-            UUID id,
-            String source,
-            IncidentCreationMode creationMode,
-            IncidentStatus status,
-            IncidentSeverity severity,
-            Instant eventTime,
-            Instant receivedAt,
-            Instant createdAt,
-            UUID createdBy
-    ) {
-        this.id = id;
-        this.source = source;
-        this.creationMode = creationMode;
-        this.status = status;
-        this.severity = severity;
-        this.eventTime = eventTime;
-        this.receivedAt = receivedAt;
-        this.createdAt = createdAt;
-        this.updatedAt = createdAt;
-        this.createdBy = createdBy;
+    @PrePersist
+    void prePersist() {
+        if (id == null) id = UUID.randomUUID();
+        if (metadata == null) metadata = Map.of();
     }
 }
