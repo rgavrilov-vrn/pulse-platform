@@ -19,15 +19,21 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 10000
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: pulse-platform
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "ru.agroeco.pulse.platform.*"
+        spring.json.trusted.packages: "ru.agroeco.pulse.*"
   main:
     web-application-type: servlet
 server:
@@ -35,16 +41,30 @@ server:
   servlet:
     context-path: /pulse-platform
 
+
 app:
   kafka:
-    enabled: ${KAFKA_ENABLED:true}
+    enabled: true
     topic:
-      incident-events: pulse.platform.incident-events
+      video-events: pulse.videoserver.events
+      incident-events: pulse.incident.events
+      notification-requests: pulse.notification.requests
+      notification-status: pulse.notification.status
   outbox:
-    relay-enabled: ${OUTBOX_RELAY_ENABLED:true}
+    relay-enabled: true
     batch-size: 50
     max-attempts: 5
-    poll-delay-ms: 5000
+    relay-interval-ms: 5000
+    default-topic: pulse.events
+    event-topics:
+      VideoEventNormalized: ${app.kafka.topic.video-events}
+      IncidentCreated:      ${app.kafka.topic.incident-events}
+      IncidentAssigned:     ${app.kafka.topic.incident-events}
+      IncidentConfirmed:    ${app.kafka.topic.incident-events}
+      IncidentRejected:     ${app.kafka.topic.incident-events}
+      IncidentClosed:       ${app.kafka.topic.incident-events}
+      NotificationRequested: ${app.kafka.topic.notification-requests}
+      NotificationStatus:    ${app.kafka.topic.notification-status}
   security:
     jwt:
       secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-secret}

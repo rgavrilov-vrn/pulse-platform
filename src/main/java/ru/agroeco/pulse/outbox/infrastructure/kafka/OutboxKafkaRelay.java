@@ -5,99 +5,94 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventEntity;
-import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventRepository;
-import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
 
+/**
+ * Публикует накопленные outbox-события в Kafka.
+ *
+ * Архитектурно:
+ *   claimBatch()  → короткая транзакция (FOR UPDATE SKIP LOCKED), возвращает DTO
+ *   send()        → вне транзакции
+ *   markSent/Fail → отдельная REQUIRES_NEW транзакция на каждое событие
+ *
+ * Семантика: at-least-once delivery. Между claimBatch-коммитом (лок снят)
+ * и markSent() событие считается "висящим" — другой инстанс может его
+ * повторно захватить и опубликовать дубль. Consumers обязаны дедуплицировать
+ * по eventId (ProcessedEventPort). Это осознанный компромисс, чтобы не держать
+ * DB-локи на время сетевого вызова Kafka.
+ */
+@Slf4j
 @Component
+@ConditionalOnProperty(name = "app.outbox.relay-enabled", havingValue = "true")
 @EnableConfigurationProperties(OutboxKafkaProperties.class)
 public class OutboxKafkaRelay {
 
-    private static final Logger log = LoggerFactory.getLogger(OutboxKafkaRelay.class);
+    private static final long SEND_TIMEOUT_SECONDS = 10L;
 
-    private final OutboxEventRepository repository;
+    private final OutboxStateUpdater state;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final OutboxKafkaProperties properties;
 
     public OutboxKafkaRelay(
-        OutboxEventRepository repository,
-        KafkaTemplate<String, String> kafkaTemplate,
-        OutboxKafkaProperties properties
+            OutboxStateUpdater state,
+            KafkaTemplate<String, String> kafkaTemplate,
+            OutboxKafkaProperties properties
     ) {
-        this.repository = repository;
+        this.state = state;
         this.kafkaTemplate = kafkaTemplate;
         this.properties = properties;
     }
 
-    @Scheduled(fixedDelayString = "${pulse.outbox.relay-interval-ms:5000}")
-    @Transactional
+    @Scheduled(fixedDelayString = "${app.outbox.relay-interval-ms:5000}")
     public void relayPendingEvents() {
-        List<OutboxEventEntity> events = repository.lockPending(
-            Instant.now(),
-            properties.getBatchSize()
+        List<ClaimedEvent> batch = state.claimBatch(
+                Instant.now(),
+                properties.getBatchSize()
         );
 
-        for (OutboxEventEntity event : events) {
-            publish(event);
+        for (ClaimedEvent event : batch) {
+            publishAndMark(event);
         }
     }
 
-    private void publish(OutboxEventEntity event) {
+    private void publishAndMark(ClaimedEvent event) {
         try {
-            String topic = resolveTopic(event.getEventType());
-            kafkaTemplate.send(topic, event.getEntityId().toString(), event.getPayload())
-                .get(10, TimeUnit.SECONDS);
+            String topic = resolveTopic(event.eventType());
+            String key = event.entityId() == null
+                    ? event.id().toString()
+                    : event.entityId().toString();
 
-            event.setStatus(OutboxStatus.SENT);
-            event.setPublishedAt(Instant.now());
-            event.setLastError(null);
-            repository.save(event);
-        } catch (InterruptedException exception) {
+            kafkaTemplate
+                    .send(topic, key, event.payload())
+                    .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            state.markSent(event.id());
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            fail(event, exception.getClass().getSimpleName() + ": " + exception.getMessage());
-        } catch (ExecutionException | TimeoutException exception) {
-            fail(event, exception.getClass().getSimpleName() + ": " + exception.getMessage());
+            state.markFailed(event.id(), "Interrupted");
+        } catch (ExecutionException | TimeoutException e) {
+            log.warn("Kafka send failed: eventId={}, error={}",
+                    event.id(), e.getMessage());
+            state.markFailed(event.id(),
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
+        } catch (RuntimeException e) {
+            // Например, ошибка в state.markSent или неожиданный сбой в KafkaTemplate
+            log.error("Unexpected error publishing outbox event {}", event.id(), e);
+            state.markFailed(event.id(), e.getClass().getSimpleName());
         }
     }
 
-    private void fail(OutboxEventEntity event, String error) {
-        log.warn("Failed to publish outbox event {}: {}", event.getId(), error);
-
-        event.setAttempts(event.getAttempts() + 1);
-        event.setLastError(error);
-
-        if (event.getAttempts() >= properties.getMaxAttempts()) {
-            event.setStatus(OutboxStatus.FAILED);
-        } else {
-            long backoffSeconds = (long) Math.pow(2, event.getAttempts());
-            event.setNextAttemptAt(Instant.now().plusSeconds(backoffSeconds));
-        }
-
-        repository.save(event);
-    }
-
-    public String resolveTopic(String eventType) {
+    private String resolveTopic(String eventType) {
         if (eventType == null) {
             return properties.getDefaultTopic();
         }
-
-        return switch (eventType) {
-            case "VideoEventNormalized" -> "pulse.videoserver.events";
-            case "IncidentCreated",
-                 "IncidentAssigned",
-                 "IncidentConfirmed",
-                 "IncidentRejected",
-                 "IncidentClosed" -> "pulse.incident.events";
-            case "NotificationRequested" -> "pulse.notification.requests";
-            case "NotificationStatus" -> "pulse.notification.status";
-            default -> properties.getDefaultTopic();
-        };
+        return properties.getEventTopics()
+                .getOrDefault(eventType, properties.getDefaultTopic());
     }
 }
