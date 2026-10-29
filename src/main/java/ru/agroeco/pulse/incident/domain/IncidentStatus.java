@@ -1,10 +1,5 @@
 package ru.agroeco.pulse.incident.domain;
 
 public enum IncidentStatus {
-    NEW,
-    ASSIGNED,
-    IN_PROGRESS,
-    CONFIRMED,
-    REJECTED,
-    CLOSED
+    DRAFT, RECORDED, NEEDS_REVIEW, CONFIRMED, REJECTED, CLOSED, CANCELLED, ARCHIVED
 }

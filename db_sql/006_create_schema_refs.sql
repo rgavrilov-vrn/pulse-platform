@@ -1,7 +1,19 @@
-CREATE SCHEMA IF NOT EXISTS ref;
+-- =============================================================================
+-- 006_create_schema_ref.sql
+-- -----------------------------------------------------------------------------
+-- Справочные данные (reference data): объекты, зоны, подразделения, сотрудники.
+--
+-- ВАЖНО:
+--  * ref.video_servers / ref.cameras — перенесены в videoserver.* (007).
+--  * ref.violation_categories / ref.checklist_items / ref.status_transitions —
+--    перенесены в incident.* (002): это справочники домена инцидентов.
+--  * ref.object_checklist_items — удалена (доменное понятие видео-домена).
+--
+-- Схема ref не зависит от incident.* и videoserver.* — полностью автономна.
+-- Порядок миграций: 001 → 002 → 006 → 007.
+-- =============================================================================
 
--- Предварительное условие: схема "incident" и её enum-типы
--- (severity_type, status_type) должны существовать — используются ниже.
+CREATE SCHEMA IF NOT EXISTS ref;
 
 CREATE TABLE IF NOT EXISTS ref.objects (
                                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -32,7 +44,8 @@ CREATE TABLE IF NOT EXISTS ref.departments (
     code VARCHAR(100) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
 CREATE TABLE IF NOT EXISTS ref.employees (
@@ -45,43 +58,22 @@ CREATE TABLE IF NOT EXISTS ref.employees (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-CREATE TABLE IF NOT EXISTS ref.violation_categories (
-                                                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(100) NOT NULL UNIQUE,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+-- -----------------------------------------------------------------------------
+-- Комментарии
+-- -----------------------------------------------------------------------------
+COMMENT ON SCHEMA ref IS 'Справочные данные: объекты, зоны, подразделения, сотрудники. Автономна.';
 
-CREATE TABLE IF NOT EXISTS ref.checklist_items (
-                                                   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    category_id UUID NOT NULL REFERENCES ref.violation_categories(id),
-    code VARCHAR(100) NOT NULL UNIQUE,
-    name VARCHAR(500) NOT NULL,
-    description TEXT,
-    requires_image BOOLEAN NOT NULL DEFAULT FALSE,
-    requires_comment BOOLEAN NOT NULL DEFAULT FALSE,
-    requires_video BOOLEAN NOT NULL DEFAULT FALSE,
-    default_severity incident.severity_type NOT NULL DEFAULT 'MEDIUM',
-    comment_template TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+COMMENT ON TABLE  ref.objects IS 'Объекты (площадки, здания, цеха). Корень пространственной иерархии.';
+COMMENT ON COLUMN ref.objects.code      IS 'Внутренний код объекта';
+COMMENT ON COLUMN ref.objects.address   IS 'Физический адрес';
+COMMENT ON COLUMN ref.objects.is_active IS 'Объект активен';
 
-CREATE TABLE IF NOT EXISTS ref.object_checklist_items (
-                                                          object_id UUID NOT NULL REFERENCES ref.objects(id),
-    checklist_item_id UUID NOT NULL REFERENCES ref.checklist_items(id),
-    is_required BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    PRIMARY KEY (object_id, checklist_item_id)
-    );
+COMMENT ON TABLE  ref.zones IS 'Зоны внутри объектов (иерархические через parent_id).';
+COMMENT ON COLUMN ref.zones.object_id IS 'Родительский объект';
+COMMENT ON COLUMN ref.zones.parent_id IS 'Родительская зона (null — корневая зона объекта)';
+COMMENT ON COLUMN ref.zones.code      IS 'Код зоны (уникален в пределах объекта)';
 
-CREATE TABLE IF NOT EXISTS ref.status_transitions (
-                                                      from_status incident.status_type NOT NULL,
-                                                      to_status   incident.status_type NOT NULL,
-                                                      PRIMARY KEY (from_status, to_status)
-    );
+COMMENT ON TABLE  ref.departments IS 'Организационные подразделения.';
+COMMENT ON TABLE  ref.employees   IS 'Сотрудники.';
+COMMENT ON COLUMN ref.employees.personnel_no  IS 'Табельный номер (уникален)';
+COMMENT ON COLUMN ref.employees.department_id IS 'Подразделение';

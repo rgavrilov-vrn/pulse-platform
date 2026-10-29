@@ -1,96 +1,127 @@
 package ru.agroeco.pulse.incident.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.generator.EventType;
+import org.hibernate.type.SqlTypes;
+
 import java.time.Instant;
 import java.util.UUID;
-import lombok.Getter;
 
 @Getter
 @Entity
 @Table(name = "incidents", schema = "incident")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Incident {
 
     @Id
     private UUID id;
 
-    @Column(name = "source_event_id", nullable = false, unique = true)
-    private UUID sourceEventId;
+    @Generated(event = EventType.INSERT)
+    @Column(name = "number", nullable = false, insertable = false, updatable = false, length = 30)
+    private String number;
 
-    @Column(name = "source_event_type", nullable = false, length = 100)
-    private String sourceEventType;
+    @Version
+    @Column(name = "version", nullable = false)
+    private Integer version;
 
-    @Column(name = "video_server_id")
-    private UUID videoServerId;
+    @Column(name = "source", nullable = false, length = 64)
+    private String source;
 
-    @Column(name = "camera_id")
-    private UUID cameraId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "creation_mode", nullable = false, length = 32)
+    private IncidentCreationMode creationMode;
 
-    @Column(name = "channel_id")
-    private UUID channelId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    private IncidentStatus status;
 
-    @Column(name = "object_id")
-    private UUID objectId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "severity", nullable = false, length = 32)
+    private IncidentSeverity severity;
 
-    @Column(nullable = false, length = 32)
-    private String status;
+    @Column(name = "event_time", nullable = false)
+    private Instant eventTime;
 
-    @Column(nullable = false, length = 32)
-    private String severity;
+    @Column(name = "received_at")
+    private Instant receivedAt;
 
-    @Column(nullable = false)
-    private String title;
-
-    @Column
-    private String description;
-
-    @Column(name = "occurred_at", nullable = false)
-    private Instant occurredAt;
-
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    @Column(name = "updated_by")
+    private UUID updatedBy;
+
+    @Column(name = "operator_id")
+    private UUID operatorId;
+
+    @Column(name = "assigned_to")
+    private UUID assignedTo;
+
+    @Column(name = "due_at")
+    private Instant dueAt;
+
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
+    @Column(name = "confirmed_by")
+    private UUID confirmedBy;
+
     @Column(name = "closed_at")
     private Instant closedAt;
 
-    @Column
-    private String resolution;
+    @Column(name = "closed_by")
+    private UUID closedBy;
 
-    protected Incident() {
-    }
+    @Column(name = "resolution_comment")
+    private String resolutionComment;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancelled_by")
+    private UUID cancelledBy;
+
+    @Column(name = "cancellation_reason")
+    private String cancellationReason;
+
+    @Column(name = "comment")
+    private String comment;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
+    private String metadata = "{}";
 
     public Incident(
-        UUID id,
-        UUID sourceEventId,
-        String sourceEventType,
-        UUID videoServerId,
-        UUID cameraId,
-        UUID channelId,
-        UUID objectId,
-        String severity,
-        String title,
-        String description,
-        Instant occurredAt,
-        Instant createdAt
+            UUID id,
+            String source,
+            IncidentCreationMode creationMode,
+            IncidentStatus status,
+            IncidentSeverity severity,
+            Instant eventTime,
+            Instant receivedAt,
+            Instant createdAt,
+            UUID createdBy
     ) {
         this.id = id;
-        this.sourceEventId = sourceEventId;
-        this.sourceEventType = sourceEventType;
-        this.videoServerId = videoServerId;
-        this.cameraId = cameraId;
-        this.channelId = channelId;
-        this.objectId = objectId;
-        this.status = IncidentStatus.NEW.name();
+        this.source = source;
+        this.creationMode = creationMode;
+        this.status = status;
         this.severity = severity;
-        this.title = title;
-        this.description = description;
-        this.occurredAt = occurredAt;
+        this.eventTime = eventTime;
+        this.receivedAt = receivedAt;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
+        this.createdBy = createdBy;
     }
 }

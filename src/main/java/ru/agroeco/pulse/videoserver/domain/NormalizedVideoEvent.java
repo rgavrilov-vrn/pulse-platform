@@ -9,6 +9,8 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import ru.agroeco.pulse.videoserver.api.EventSeverity;
+import ru.agroeco.pulse.videoserver.api.VideoEventType;
 
 import java.time.Instant;
 import java.util.UUID;

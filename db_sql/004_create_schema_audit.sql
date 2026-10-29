@@ -23,3 +23,25 @@ CREATE TABLE IF NOT EXISTS audit.audit_log_default PARTITION OF audit.audit_log 
 
 CREATE INDEX IF NOT EXISTS ix_audit_log_entity ON audit.audit_log (entity_schema, entity_table, entity_id);
 CREATE INDEX IF NOT EXISTS ix_audit_log_occurred_at ON audit.audit_log (occurred_at DESC);
+
+-- -----------------------------------------------------------------------------
+-- Комментарии
+-- -----------------------------------------------------------------------------
+COMMENT ON SCHEMA audit IS 'Аудит действий: append-only журнал изменений сущностей. Партиционирован по occurred_at.';
+
+COMMENT ON TABLE  audit.audit_log IS 'Журнал аудита (append-only). Партиционирован по occurred_at (RANGE).';
+COMMENT ON COLUMN audit.audit_log.id             IS 'Порядковый номер записи (BIGSERIAL, в составе PK с occurred_at)';
+COMMENT ON COLUMN audit.audit_log.occurred_at    IS 'Момент события (ключ партиционирования)';
+COMMENT ON COLUMN audit.audit_log.actor_id       IS 'Пользователь-инициатор (nullable — системные действия)';
+COMMENT ON COLUMN audit.audit_log.action         IS 'Действие: CREATE / UPDATE / DELETE / LOGIN / ...';
+COMMENT ON COLUMN audit.audit_log.entity_schema  IS 'Схема изменённой сущности';
+COMMENT ON COLUMN audit.audit_log.entity_table   IS 'Таблица изменённой сущности';
+COMMENT ON COLUMN audit.audit_log.entity_id      IS 'Идентификатор изменённой сущности (UUID)';
+COMMENT ON COLUMN audit.audit_log.old_data       IS 'Состояние до изменения (JSONB), null для CREATE';
+COMMENT ON COLUMN audit.audit_log.new_data       IS 'Состояние после изменения (JSONB), null для DELETE';
+COMMENT ON COLUMN audit.audit_log.request_id     IS 'Идентификатор запроса (корреляция с логами)';
+COMMENT ON COLUMN audit.audit_log.source_ip      IS 'IP-адрес источника';
+COMMENT ON COLUMN audit.audit_log.user_agent     IS 'User-Agent клиента';
+
+COMMENT ON TABLE  audit.audit_log_2026        IS 'Партиция audit_log за 2026 год.';
+COMMENT ON TABLE  audit.audit_log_default     IS 'Default-партиция audit_log (fallback для дат вне объявленных диапазонов).';

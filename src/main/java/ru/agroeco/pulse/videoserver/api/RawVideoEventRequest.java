@@ -14,7 +14,7 @@ public record RawVideoEventRequest(
         UUID channelId,
         @NotBlank @Size(max = 200) String externalEventId,
         @NotNull Instant occurredAt,
-        @NotBlank @Size(max = 100) String source,
+        @NotBlank @Size(max = 64) String source,   // было max = 100 — БД: VARCHAR(64)
         @NotBlank @ValidJson String rawPayload
 ) {
 }

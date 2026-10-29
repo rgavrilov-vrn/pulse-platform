@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.videoserver.domain;
+package ru.agroeco.pulse.videoserver.api;
 
 public enum VideoEventType {
     MOTION_DETECTED,

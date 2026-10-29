@@ -1,8 +1,5 @@
 package ru.agroeco.pulse.videoserver.api;
 
-import ru.agroeco.pulse.videoserver.domain.EventSeverity;
-import ru.agroeco.pulse.videoserver.domain.VideoEventType;
-
 import java.time.Instant;
 import java.util.UUID;
 

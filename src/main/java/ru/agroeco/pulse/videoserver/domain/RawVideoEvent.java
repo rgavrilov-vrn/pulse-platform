@@ -35,23 +35,29 @@ public class RawVideoEvent {
     @Id
     private UUID id;
 
+    @Column(name = "video_server_id", nullable = false)   // было без @Column
     private UUID videoServerId;
 
+    @Column(name = "camera_id")
     private UUID cameraId;
 
+    @Column(name = "channel_id")
     private UUID channelId;
 
     @Column(name = "external_event_id", nullable = false, length = 200)
     private String externalEventId;
 
+    @Column(name = "occurred_at", nullable = false)       // было без @Column
     private Instant occurredAt;
 
+    @Column(name = "source", nullable = false, length = 64)  // было без @Column
     private String source;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "raw_payload", columnDefinition = "jsonb", nullable = false)
     private String rawPayload;
 
+    @Column(name = "ingested_at", nullable = false)       // было без @Column
     private Instant ingestedAt;
 
     public RawVideoEvent(

@@ -4,6 +4,8 @@ package ru.agroeco.pulse.videoserver.domain;
 
 import ru.agroeco.pulse.audit.domain.event.AuditAction;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
+import ru.agroeco.pulse.videoserver.api.EventSeverity;
+import ru.agroeco.pulse.videoserver.api.VideoEventType;
 
 import java.time.Instant;
 import java.util.HashMap;

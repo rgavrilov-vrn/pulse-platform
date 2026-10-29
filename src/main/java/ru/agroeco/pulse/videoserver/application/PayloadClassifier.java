@@ -6,8 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
-import ru.agroeco.pulse.videoserver.domain.EventSeverity;
-import ru.agroeco.pulse.videoserver.domain.VideoEventType;
+import ru.agroeco.pulse.videoserver.api.EventSeverity;
+import ru.agroeco.pulse.videoserver.api.VideoEventType;
 
 @Component
 @RequiredArgsConstructor

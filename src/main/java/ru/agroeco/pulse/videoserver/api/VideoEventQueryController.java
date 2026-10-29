@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -97,17 +98,21 @@ public class VideoEventQueryController {
 
     private Page<NormalizedVideoEvent> fetchPage(
             UUID videoServerId, UUID cameraId, Instant from, Instant to, Pageable pageable) {
-        if (cameraId != null) {
-            return repository.findByCameraId(cameraId, pageable);
-        }
-        if (videoServerId != null && from != null && to != null) {
-            return repository.findByVideoServerIdAndOccurredAtBetween(
-                    videoServerId, from, to, pageable);
-        }
+
+        Specification<NormalizedVideoEvent> spec = (root, q, cb) -> cb.conjunction();
         if (videoServerId != null) {
-            return repository.findByVideoServerId(videoServerId, pageable);
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("videoServerId"), videoServerId));
         }
-        return repository.findAll(pageable);
+        if (cameraId != null) {
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("cameraId"), cameraId));
+        }
+        if (from != null) {
+            spec = spec.and((root, q, cb) -> cb.greaterThanOrEqualTo(root.get("occurredAt"), from));
+        }
+        if (to != null) {
+            spec = spec.and((root, q, cb) -> cb.lessThanOrEqualTo(root.get("occurredAt"), to));
+        }
+        return repository.findAll(spec, pageable);
     }
 
     private void validateRange(Instant from, Instant to) {
