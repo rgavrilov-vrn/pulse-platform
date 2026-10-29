@@ -1,0 +1,25 @@
+# Maven: результаты сборки
+target/
+
+# Скомпилированные Java-классы
+*.class
+
+# Локальные настройки IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Логи
+*.log
+logs/
+
+# Локальные переменные окружения и секреты
+.env
+.env.*
+!.env.example
+
+# Служебные файлы ОС
+.DS_Store
+Thumbs.db
+Desktop.ini

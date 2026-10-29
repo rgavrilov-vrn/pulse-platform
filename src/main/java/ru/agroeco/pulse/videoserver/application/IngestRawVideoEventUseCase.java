@@ -1,7 +1,5 @@
 package ru.agroeco.pulse.videoserver.application;
 
-import java.time.Instant;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -10,8 +8,12 @@ import ru.agroeco.pulse.videoserver.api.RawVideoEventRequest;
 import ru.agroeco.pulse.videoserver.api.VideoEventNormalized;
 import ru.agroeco.pulse.videoserver.domain.NormalizedVideoEvent;
 import ru.agroeco.pulse.videoserver.domain.RawVideoEvent;
+import ru.agroeco.pulse.videoserver.domain.VideoEventIngested;
 import ru.agroeco.pulse.videoserver.infrastructure.persistence.NormalizedVideoEventRepository;
 import ru.agroeco.pulse.videoserver.infrastructure.persistence.RawVideoEventRepository;
+
+import java.time.Instant;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -19,93 +21,91 @@ public class IngestRawVideoEventUseCase {
 
     private static final int CURRENT_PAYLOAD_VERSION = 1;
 
-    private final RawVideoEventRepository rawVideoEventRepository;
-    private final NormalizedVideoEventRepository normalizedVideoEventRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final RawVideoEventRepository rawRepository;
+    private final NormalizedVideoEventRepository normalizedRepository;
+    private final PayloadClassifier classifier;
+    private final ApplicationEventPublisher publisher;
 
     @Transactional
     public VideoEventNormalized handle(RawVideoEventRequest request) {
-        UUID rawEventId = UUID.randomUUID();
+        // 1) идемпотентность: если уже приняли это событие — вернём сохранённый ответ
+        return rawRepository
+                .findByVideoServerIdAndExternalEventId(
+                        request.videoServerId(), request.externalEventId())
+                .map(this::toResponse)
+                .orElseGet(() -> processNew(request));
+    }
+
+    private VideoEventNormalized processNew(RawVideoEventRequest request) {
         Instant now = Instant.now();
 
-        RawVideoEvent rawEvent = new RawVideoEvent(
-            rawEventId,
-            request.videoServerId(),
-            request.cameraId(),
-            request.channelId(),
-            request.occurredAt(),
-            request.source(),
-            request.rawPayload(),
-            now
+        RawVideoEvent raw = new RawVideoEvent(
+                UUID.randomUUID(),
+                request.videoServerId(),
+                request.cameraId(),
+                request.channelId(),
+                request.externalEventId(),
+                request.occurredAt(),
+                request.source(),
+                request.rawPayload(),
+                now
         );
-        rawVideoEventRepository.save(rawEvent);
+        rawRepository.save(raw);
 
-        UUID normalizedEventId = UUID.randomUUID();
-        String eventType = normalizeEventType(request.rawPayload());
-        String severity = normalizeSeverity(request.rawPayload());
+        PayloadClassifier.Classification c = classifier.classify(request.rawPayload());
 
-        NormalizedVideoEvent normalizedEvent = new NormalizedVideoEvent(
-            normalizedEventId,
-            rawEventId,
-            request.videoServerId(),
-            request.cameraId(),
-            request.channelId(),
-            null,
-            request.occurredAt(),
-            request.source(),
-            eventType,
-            severity,
-            CURRENT_PAYLOAD_VERSION,
-            now
+        NormalizedVideoEvent normalized = new NormalizedVideoEvent(
+                UUID.randomUUID(),
+                raw.getId(),
+                request.videoServerId(),
+                request.cameraId(),
+                request.channelId(),
+                null,
+                request.occurredAt(),
+                request.source(),
+                c.type(),
+                c.severity(),
+                CURRENT_PAYLOAD_VERSION,
+                now
         );
-        normalizedVideoEventRepository.save(normalizedEvent);
+        normalizedRepository.save(normalized);
 
-        VideoEventNormalized event = new VideoEventNormalized(
-            normalizedEventId,
-            rawEventId,
-            request.videoServerId(),
-            request.cameraId(),
-            request.channelId(),
-            null,
-            request.occurredAt(),
-            request.source(),
-            eventType,
-            severity,
-            CURRENT_PAYLOAD_VERSION
-        );
+        // в audit/outbox уходит доменное событие, не API-DTO
+        publisher.publishEvent(new VideoEventIngested(
+                normalized.getId(),
+                raw.getId(),
+                request.videoServerId(),
+                request.cameraId(),
+                request.channelId(),
+                request.occurredAt(),
+                request.source(),
+                c.type(),
+                c.severity()
+        ));
 
-        eventPublisher.publishEvent(event);
-        return event;
+        return toResponse(normalized);
     }
 
-    private String normalizeEventType(String rawPayload) {
-        if (rawPayload == null || rawPayload.isBlank()) {
-            return "UNKNOWN";
-        }
-        String payload = rawPayload.toLowerCase();
-        if (payload.contains("motion")) {
-            return "MOTION_DETECTED";
-        }
-        if (payload.contains("offline")) {
-            return "CAMERA_OFFLINE";
-        }
-        if (payload.contains("tamper")) {
-            return "CAMERA_TAMPERING";
-        }
-        return "VIDEO_EVENT_RECEIVED";
+    private VideoEventNormalized toResponse(RawVideoEvent raw) {
+        NormalizedVideoEvent normalized = normalizedRepository.findByRawEventId(raw.getId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Normalized event missing for raw event " + raw.getId()));
+        return toResponse(normalized);
     }
 
-    private String normalizeSeverity(String rawPayload) {
-        if (rawPayload == null || rawPayload.isBlank()) {
-            return "INFO";
-        }
-        String payload = rawPayload.toLowerCase();
-        if (payload.contains("tamper") || payload.contains("critical")) {
-            return "CRITICAL";
-        }
-        if (payload.contains("motion") || payload.contains("warning")) {
-            return "WARNING";
-        }
-        return "INFO";
+    private VideoEventNormalized toResponse(NormalizedVideoEvent n) {
+        return new VideoEventNormalized(
+                n.getId(),
+                n.getRawEventId(),
+                n.getVideoServerId(),
+                n.getCameraId(),
+                n.getChannelId(),
+                n.getObjectId(),
+                n.getOccurredAt(),
+                n.getSource(),
+                n.getEventType(),
+                n.getSeverity(),
+                n.getPayloadVersion()
+        );
     }
 }

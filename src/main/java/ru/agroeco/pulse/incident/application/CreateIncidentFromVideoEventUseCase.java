@@ -37,7 +37,7 @@ public class CreateIncidentFromVideoEventUseCase {
             event.cameraId(),
             event.channelId(),
             event.objectId(),
-            event.severity(),
+            event.severity().name(),
             buildTitle(event),
             buildDescription(event),
             event.occurredAt(),
@@ -53,7 +53,7 @@ public class CreateIncidentFromVideoEventUseCase {
             event.cameraId(),
             event.channelId(),
             event.objectId(),
-            event.severity(),
+            event.severity().name(),
             incident.getTitle(),
             event.occurredAt()
         );

@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.adapter.persistence.audit;
+package ru.agroeco.pulse.audit.adapter.persistence;
 
 import jakarta.persistence.*;
 import lombok.*;

@@ -28,34 +28,34 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final ApplicationEventPublisher eventPublisher;
+    private final LoginAuditService loginAuditService;
 
     @PostMapping("/token")
     @Operation(summary = "Issue JWT access token")
     public ResponseEntity<TokenResponse> token(@Valid @RequestBody TokenRequest request) {
         try {
             var authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.username(), request.password())
-            );
+                    new UsernamePasswordAuthenticationToken(
+                            request.username(), request.password()));
 
             AppPrincipal principal = (AppPrincipal) authentication.getPrincipal();
 
+            // 1) сначала выпускаем токен — если упадёт, аудита успеха не будет
+            String token = jwtService.generateToken(principal);
+            long ttl = jwtService.expirationSeconds();
+
+            // 2) затем фиксируем успешную аутентификацию
             eventPublisher.publishEvent(new UserAuthenticated(
                     principal.id(),
-                    principal.getUsername(),
+                    principal.username(),
                     Instant.now()
             ));
 
-            return ResponseEntity.ok(new TokenResponse(
-                    jwtService.generateToken(principal),
-                    "Bearer",
-                    jwtService.expirationSeconds()
-            ));
+            return ResponseEntity.ok(new TokenResponse(token, "Bearer", ttl));
+
         } catch (AuthenticationException ex) {
-            eventPublisher.publishEvent(new UserAuthenticationFailed(
-                request.username(),
-                ex.getMessage(),
-                Instant.now()
-            ));
+            // 3) аудит неудачи — в отдельной транзакции, переживёт откат
+            loginAuditService.recordFailure(request.username(), ex.getClass().getSimpleName());
             throw ex;
         }
     }

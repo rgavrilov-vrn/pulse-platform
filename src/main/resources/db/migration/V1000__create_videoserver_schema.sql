@@ -57,3 +57,29 @@ CREATE INDEX IF NOT EXISTS idx_raw_video_events_occurred_at
 
 CREATE INDEX IF NOT EXISTS idx_normalized_video_events_event_type
     ON videoserver.normalized_video_events(event_type);
+
+
+-- 1. новая колонка
+ALTER TABLE videoserver.raw_video_events
+    ADD COLUMN external_event_id VARCHAR(200);
+
+-- 2. backfill для существующих записей (если есть) — синтетический ключ
+UPDATE videoserver.raw_video_events
+SET external_event_id = id::text
+WHERE external_event_id IS NULL;
+
+-- 3. NOT NULL
+ALTER TABLE videoserver.raw_video_events
+    ALTER COLUMN external_event_id SET NOT NULL;
+
+-- 4. уникальность
+ALTER TABLE videoserver.raw_video_events
+    ADD CONSTRAINT uk_raw_video_events_server_external
+        UNIQUE (video_server_id, external_event_id);
+
+-- 5. индексы (полезно)
+CREATE INDEX idx_raw_video_events_camera    ON videoserver.raw_video_events (camera_id);
+CREATE INDEX idx_raw_video_events_occurred  ON videoserver.raw_video_events (occurred_at);
+CREATE INDEX idx_norm_events_camera_occurred   ON videoserver.normalized_video_events (camera_id, occurred_at);
+CREATE INDEX idx_norm_events_server_occurred   ON videoserver.normalized_video_events (video_server_id, occurred_at);
+CREATE INDEX idx_norm_events_raw               ON videoserver.normalized_video_events (raw_event_id);

@@ -1,13 +1,21 @@
 package ru.agroeco.pulse.videoserver.domain;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "channels", schema = "videoserver")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Channel {
 
     @Id
@@ -19,43 +27,18 @@ public class Channel {
 
     private String name;
 
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private ChannelStatus status;
 
     private Instant createdAt;
 
-    protected Channel() {
-    }
-
-    public Channel(UUID id, UUID cameraId, String externalId, String name, String status, Instant createdAt) {
+    public Channel(UUID id, UUID cameraId, String externalId, String name,
+                   ChannelStatus status, Instant createdAt) {
         this.id = id;
         this.cameraId = cameraId;
         this.externalId = externalId;
         this.name = name;
         this.status = status;
         this.createdAt = createdAt;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public UUID getCameraId() {
-        return cameraId;
-    }
-
-    public String getExternalId() {
-        return externalId;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 }

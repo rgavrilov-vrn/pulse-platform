@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.agroeco.pulse.videoserver.application.IngestRawVideoEventUseCase;
 
 @RestController
-@RequestMapping("/api/videoserver/events")
+@RequestMapping("/api/v1/videoserver/events")
 public class VideoServerEventController {
 
     private final IngestRawVideoEventUseCase ingestRawVideoEventUseCase;

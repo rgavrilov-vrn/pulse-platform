@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.adapter.persistence.audit;
+package ru.agroeco.pulse.audit.adapter.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -9,9 +9,9 @@ import java.util.UUID;
 public interface AuditEventRepository extends JpaRepository<AuditEventEntity, Long> {
 
     List<AuditEventEntity> findByEntitySchemaAndEntityTableAndEntityId(
-        String entitySchema,
-        String entityTable,
-        UUID entityId
+            String entitySchema,
+            String entityTable,
+            UUID entityId
     );
 
     List<AuditEventEntity> findByOccurredAtAfterOrderByOccurredAtDesc(Instant occurredAfter);

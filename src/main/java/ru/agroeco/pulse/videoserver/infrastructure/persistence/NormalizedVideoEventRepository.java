@@ -1,8 +1,24 @@
 package ru.agroeco.pulse.videoserver.infrastructure.persistence;
 
-import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import ru.agroeco.pulse.videoserver.domain.NormalizedVideoEvent;
 
-public interface NormalizedVideoEventRepository extends JpaRepository<NormalizedVideoEvent, UUID> {
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface NormalizedVideoEventRepository
+        extends JpaRepository<NormalizedVideoEvent, UUID> {
+
+    Optional<NormalizedVideoEvent> findByRawEventId(UUID rawEventId);
+
+    // сортировка управляется через Pageable, не через имя метода
+    Page<NormalizedVideoEvent> findByVideoServerId(UUID videoServerId, Pageable pageable);
+
+    Page<NormalizedVideoEvent> findByCameraId(UUID cameraId, Pageable pageable);
+
+    Page<NormalizedVideoEvent> findByVideoServerIdAndOccurredAtBetween(
+            UUID videoServerId, Instant from, Instant to, Pageable pageable);
 }

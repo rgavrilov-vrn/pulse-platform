@@ -3,6 +3,7 @@ package ru.agroeco.pulse.platform.adapter.http;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -16,12 +17,21 @@ import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.DuplicateEventException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
 
+import javax.security.sasl.AuthenticationException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Map<String, String>> onAuthError(AuthenticationException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "invalid_credentials"));
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> notFound(NotFoundException ex, HttpServletRequest req) {
         return build(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), req, null);

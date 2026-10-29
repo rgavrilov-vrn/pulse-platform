@@ -1,17 +1,23 @@
 package ru.agroeco.pulse.platform.domain.event;
 
+import lombok.Builder;
+import lombok.With;
+import ru.agroeco.pulse.audit.domain.event.AuditAction;
+
 import java.time.Instant;
 import java.util.UUID;
 
+@Builder(toBuilder = true)
+@With
 public record UserAuthenticated(
-    UUID userId,
-    String username,
-    Instant occurredAt
+        UUID userId,
+        String username,
+        Instant occurredAt
 ) implements DomainEvent {
 
     @Override
-    public String eventType() {
-        return "USER_AUTHENTICATED";
+    public AuditAction eventType() {
+        return AuditAction.USER_AUTHENTICATED;
     }
 
     @Override
@@ -27,5 +33,11 @@ public record UserAuthenticated(
     @Override
     public String entityTable() {
         return "users";
+    }
+
+    @Override
+    public UUID actorId() {
+        // при логине SecurityContext может быть ещё не заполнен
+        return userId;
     }
 }

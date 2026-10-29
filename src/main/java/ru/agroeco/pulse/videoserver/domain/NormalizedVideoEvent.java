@@ -1,13 +1,32 @@
 package ru.agroeco.pulse.videoserver.domain;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "normalized_video_events", schema = "videoserver")
+@Table(
+        name = "normalized_video_events",
+        schema = "videoserver",
+        indexes = {
+                @Index(name = "idx_norm_events_camera_occurred",
+                        columnList = "camera_id, occurred_at"),
+                @Index(name = "idx_norm_events_server_occurred",
+                        columnList = "video_server_id, occurred_at"),
+                @Index(name = "idx_norm_events_raw", columnList = "raw_event_id")
+        }
+)
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class NormalizedVideoEvent {
 
     @Id
@@ -27,30 +46,29 @@ public class NormalizedVideoEvent {
 
     private String source;
 
-    private String eventType;
+    @Enumerated(EnumType.STRING)
+    private VideoEventType eventType;
 
-    private String severity;
+    @Enumerated(EnumType.STRING)
+    private EventSeverity severity;
 
-    private Integer payloadVersion;
+    private int payloadVersion;
 
     private Instant normalizedAt;
 
-    protected NormalizedVideoEvent() {
-    }
-
     public NormalizedVideoEvent(
-        UUID id,
-        UUID rawEventId,
-        UUID videoServerId,
-        UUID cameraId,
-        UUID channelId,
-        UUID objectId,
-        Instant occurredAt,
-        String source,
-        String eventType,
-        String severity,
-        Integer payloadVersion,
-        Instant normalizedAt
+            UUID id,
+            UUID rawEventId,
+            UUID videoServerId,
+            UUID cameraId,
+            UUID channelId,
+            UUID objectId,
+            Instant occurredAt,
+            String source,
+            VideoEventType eventType,
+            EventSeverity severity,
+            int payloadVersion,
+            Instant normalizedAt
     ) {
         this.id = id;
         this.rawEventId = rawEventId;
@@ -64,53 +82,5 @@ public class NormalizedVideoEvent {
         this.severity = severity;
         this.payloadVersion = payloadVersion;
         this.normalizedAt = normalizedAt;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public UUID getRawEventId() {
-        return rawEventId;
-    }
-
-    public UUID getVideoServerId() {
-        return videoServerId;
-    }
-
-    public UUID getCameraId() {
-        return cameraId;
-    }
-
-    public UUID getChannelId() {
-        return channelId;
-    }
-
-    public UUID getObjectId() {
-        return objectId;
-    }
-
-    public Instant getOccurredAt() {
-        return occurredAt;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public String getEventType() {
-        return eventType;
-    }
-
-    public String getSeverity() {
-        return severity;
-    }
-
-    public Integer getPayloadVersion() {
-        return payloadVersion;
-    }
-
-    public Instant getNormalizedAt() {
-        return normalizedAt;
     }
 }
