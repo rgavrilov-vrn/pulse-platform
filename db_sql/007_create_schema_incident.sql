@@ -472,3 +472,192 @@ COMMENT ON TABLE  incident.archive_references   IS 'Ссылки на архив
 COMMENT ON TABLE  incident.comments             IS 'Комментарии к инциденту (оператор, ревью, резолюция, система).';
 COMMENT ON TABLE  incident.assignments          IS 'История назначений ответственного (одно current).';
 COMMENT ON TABLE  incident.status_history       IS 'История переходов статусов.';
+
+-- =============================================================================
+-- 008_add_category_groups.sql
+-- Новый справочник "группы категорий" (Событие / Нарушение) + привязка
+-- violation_categories → category_groups.
+-- Идемпотентно: IF NOT EXISTS / WHERE group_id IS NULL.
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS incident.category_groups (
+                                                        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code       VARCHAR(100) NOT NULL UNIQUE,
+    name       VARCHAR(255) NOT NULL,
+    icon       VARCHAR(100),
+    sort_order INTEGER      NOT NULL DEFAULT 0,
+    is_active  BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+    );
+
+-- seed двух групп
+INSERT INTO incident.category_groups (code, name, icon, sort_order) VALUES
+                                                                        ('EVENT',     'Событие',   'event',     10),
+                                                                        ('VIOLATION', 'Нарушение', 'violation', 20)
+    ON CONFLICT (code) DO NOTHING;
+
+-- backfill: всем существующим категориям — VIOLATION по умолчанию
+ALTER TABLE incident.violation_categories
+    ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES incident.category_groups(id);
+
+UPDATE incident.violation_categories
+SET group_id = (SELECT id FROM incident.category_groups WHERE code = 'VIOLATION')
+WHERE group_id IS NULL;
+
+ALTER TABLE incident.violation_categories
+    ALTER COLUMN group_id SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_violation_categories_group
+    ON incident.violation_categories (group_id, sort_order);
+
+COMMENT ON TABLE  incident.category_groups IS 'Верхнеуровневые группы категорий: Событие / Нарушение.';
+COMMENT ON COLUMN incident.category_groups.icon IS 'Имя иконки для UI (optional).';
+
+
+-- =============================================================================
+-- 009_seed_incident_catalog.sql
+-- Seed справочника инцидентов:
+--   Группа 1: Уведомления (EVENT)
+--     └ Категория: Общая (EVENT_GENERAL)
+--         ├ Чек-лист: Технические              (TECHNICAL)
+--         ├ Чек-лист: Инфраструктурные         (INFRASTRUCTURE)
+--         └ Чек-лист: Нарушения регламента     (REGULATION_VIOLATIONS)
+--   Группа 2: Нарушения (VIOLATION)
+--     └ Категория: Биобезопасность (VIOLATION_BIOSAFETY)
+--         ├ Чек-лист: Санитарные обработки               (SANITARY_TREATMENTS)
+--         ├ Чек-лист: Транспорт: расхождение по весу     (TRANSPORT_WEIGHT_DISCREPANCY)
+--         └ Чек-лист: Транспортные операции              (TRANSPORT_OPERATIONS)
+--
+-- Идемпотентно: ON CONFLICT (code) DO UPDATE — правки текста/сортировки
+-- подхватываются при перезапуске, id сущностей не меняются.
+-- Зависит от: 008_add_category_groups.sql
+-- =============================================================================
+
+BEGIN;
+
+-- -----------------------------------------------------------------------------
+-- 1. Группы
+-- -----------------------------------------------------------------------------
+INSERT INTO incident.category_groups (code, name, icon, sort_order, is_active) VALUES
+                                                                                   ('EVENT',     'Уведомления', 'event',     10, TRUE),
+                                                                                   ('VIOLATION', 'Нарушения',   'violation', 20, TRUE)
+    ON CONFLICT (code) DO UPDATE
+                              SET name       = EXCLUDED.name,
+                              icon       = EXCLUDED.icon,
+                              sort_order = EXCLUDED.sort_order,
+                              is_active  = EXCLUDED.is_active,
+                              updated_at = now();
+
+-- -----------------------------------------------------------------------------
+-- 2. Категории
+-- -----------------------------------------------------------------------------
+INSERT INTO incident.violation_categories
+(group_id, code, name, description, sort_order, is_active)
+VALUES
+    ((SELECT id FROM incident.category_groups WHERE code = 'EVENT'),
+     'EVENT_GENERAL',
+     'Общая',
+     'Общие уведомления: технические, инфраструктурные, нарушения регламента',
+     10, TRUE),
+
+    ((SELECT id FROM incident.category_groups WHERE code = 'VIOLATION'),
+     'VIOLATION_BIOSAFETY',
+     'Биобезопасность',
+     'Нарушения биобезопасности: санитарные обработки, транспортные операции',
+     10, TRUE)
+    ON CONFLICT (code) DO UPDATE
+                              SET group_id    = EXCLUDED.group_id,
+                              name        = EXCLUDED.name,
+                              description = EXCLUDED.description,
+                              sort_order  = EXCLUDED.sort_order,
+                              is_active   = EXCLUDED.is_active,
+                              updated_at  = now();
+
+-- -----------------------------------------------------------------------------
+-- 3. Чек-листы для «Общая» (EVENT_GENERAL)
+-- -----------------------------------------------------------------------------
+INSERT INTO incident.checklist_items
+(category_id, code, name, description, comment_template,
+ default_severity, sort_order, is_active)
+VALUES
+    ((SELECT id FROM incident.violation_categories WHERE code = 'EVENT_GENERAL'),
+     'TECHNICAL',
+     'Технические',
+     'Технические неисправности оборудования',
+     'Технический сбой: ',
+     'MEDIUM', 10, TRUE),
+
+    ((SELECT id FROM incident.violation_categories WHERE code = 'EVENT_GENERAL'),
+     'INFRASTRUCTURE',
+     'Инфраструктурные',
+     'Инфраструктурные инциденты: питание, сеть, связь',
+     'Инфраструктурный инцидент: ',
+     'MEDIUM', 20, TRUE),
+
+    ((SELECT id FROM incident.violation_categories WHERE code = 'EVENT_GENERAL'),
+     'REGULATION_VIOLATIONS',
+     'Нарушения регламента',
+     'Нарушения внутреннего регламента и инструкций',
+     'Нарушение регламента: ',
+     'HIGH', 30, TRUE)
+    ON CONFLICT (code) DO UPDATE
+                              SET name             = EXCLUDED.name,
+                              description      = EXCLUDED.description,
+                              comment_template = EXCLUDED.comment_template,
+                              default_severity = EXCLUDED.default_severity,
+                              sort_order       = EXCLUDED.sort_order,
+                              is_active        = EXCLUDED.is_active,
+                              updated_at       = now();
+
+-- -----------------------------------------------------------------------------
+-- 4. Чек-листы для «Биобезопасность» (VIOLATION_BIOSAFETY)
+-- -----------------------------------------------------------------------------
+INSERT INTO incident.checklist_items
+(category_id, code, name, description, comment_template,
+ default_severity, sort_order, is_active)
+VALUES
+    ((SELECT id FROM incident.violation_categories WHERE code = 'VIOLATION_BIOSAFETY'),
+     'SANITARY_TREATMENTS',
+     'Санитарные обработки',
+     'Дератизация, дезинфекция, замена дезбарьеров',
+     'Санитарная обработка: ',
+     'MEDIUM', 10, TRUE),
+
+    ((SELECT id FROM incident.violation_categories WHERE code = 'VIOLATION_BIOSAFETY'),
+     'TRANSPORT_WEIGHT_DISCREPANCY',
+     'Транспорт: расхождение по весу',
+     'Положительное/отрицательное расхождение веса после выгрузки корма',
+     'Расхождение по весу: ',
+     'HIGH', 20, TRUE),
+
+    ((SELECT id FROM incident.violation_categories WHERE code = 'VIOLATION_BIOSAFETY'),
+     'TRANSPORT_OPERATIONS',
+     'Транспортные операции',
+     'Погрузка/выгрузка, животновозы, кормовозы, спермопродукция',
+     'Транспортная операция: ',
+     'MEDIUM', 30, TRUE)
+    ON CONFLICT (code) DO UPDATE
+                              SET name             = EXCLUDED.name,
+                              description      = EXCLUDED.description,
+                              comment_template = EXCLUDED.comment_template,
+                              default_severity = EXCLUDED.default_severity,
+                              sort_order       = EXCLUDED.sort_order,
+                              is_active        = EXCLUDED.is_active,
+                              updated_at       = now();
+
+COMMIT;
+
+-- =============================================================================
+-- Проверка (выполнить вручную после COMMIT):
+--
+-- SELECT g.sort_order AS g_ord, g.code AS group_code, g.name AS group_name,
+--        c.sort_order AS c_ord, c.code AS category_code, c.name AS category_name,
+--        i.sort_order AS i_ord, i.code AS item_code, i.name AS item_name,
+--        i.default_severity
+-- FROM   incident.category_groups       g
+--        LEFT JOIN incident.violation_categories c ON c.group_id = g.id
+--        LEFT JOIN incident.checklist_items     i ON i.category_id = c.id
+-- WHERE  g.is_active AND c.is_active AND i.is_active
+-- ORDER  BY g.sort_order, c.sort_order, i.sort_order;
+-- =============================================================================
