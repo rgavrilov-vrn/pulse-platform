@@ -1,16 +1,14 @@
 package ru.agroeco.pulse.platform.application.outbox;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import tools.jackson.databind.ObjectMapper;
 import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventEntity;
 import ru.agroeco.pulse.platform.adapter.persistence.outbox.OutboxEventRepository;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 
@@ -25,13 +23,12 @@ public class OutboxListener {
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void on(DomainEvent event) {
         if (!event.publishToOutbox()) {
-            return; // ручной аудит и auth-события в outbox не пишем
+            return;
         }
-
         repository.save(OutboxEventEntity.builder()
-                .eventType(event.outboxEventType())       // ← было event.eventType().getValue()
+                .eventType(event.outboxEventType())
                 .entityId(event.entityId())
-                .payload(serialize(event.outboxPayload())) // ← было serialize(event)
+                .payload(serialize(event.outboxPayload()))
                 .status(OutboxStatus.NEW)
                 .attempts(0)
                 .nextAttemptAt(Instant.now())
@@ -42,7 +39,7 @@ public class OutboxListener {
         if (payload == null) return "{}";
         try {
             return mapper.writeValueAsString(payload);
-        } catch (JacksonException ex) {   // Jackson 3: unchecked
+        } catch (RuntimeException ex) {
             throw new IllegalStateException("Cannot serialize outbox payload", ex);
         }
     }

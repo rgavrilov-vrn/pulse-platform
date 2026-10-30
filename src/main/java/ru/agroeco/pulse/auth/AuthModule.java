@@ -4,6 +4,6 @@ import org.springframework.modulith.ApplicationModule;
 
 @ApplicationModule(
         displayName = "Auth",
-        allowedDependencies = {"platform", "audit"}
+        allowedDependencies = {"platform"}
 )
 public interface AuthModule {}

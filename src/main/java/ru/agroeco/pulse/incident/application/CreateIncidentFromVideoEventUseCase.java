@@ -30,9 +30,6 @@ public class CreateIncidentFromVideoEventUseCase {
     public static final String DOMAIN_VIDEOSERVER = "videoserver";
     public static final String DOMAIN_REF = "ref";
 
-    /**
-     * Well-known SYSTEM user id — синхронизирован с 003_seed_system_user.sql.
-     */
     public static final UUID SYSTEM_USER_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000001");
 
@@ -46,7 +43,6 @@ public class CreateIncidentFromVideoEventUseCase {
         Instant now = Instant.now();
 
         IncidentSeverity severity = mapSeverity(event.severity());
-        String title = "Video incident: " + event.eventType();
 
         IncidentEntity incident = IncidentEntity.builder()
                 .id(incidentId)
@@ -60,7 +56,6 @@ public class CreateIncidentFromVideoEventUseCase {
                 .updatedBy(SYSTEM_USER_ID)
                 .build();
 
-        // saveAndFlush — чтобы @Generated(number) заполнился до публикации события
         incidentRepository.saveAndFlush(incident);
 
         List<IncidentContextRef> refs = buildContextRefs(incidentId, event);
@@ -77,20 +72,15 @@ public class CreateIncidentFromVideoEventUseCase {
                 .eventTime(event.occurredAt())
                 .actorId(SYSTEM_USER_ID)
                 .occurredAt(now)
-                // интеграционный контекст
                 .sourceEventId(event.eventId())
                 .sourceEventType("VideoEventNormalized")
                 .videoServerId(event.videoServerId())
                 .cameraId(event.cameraId())
                 .channelId(event.channelId())
                 .objectId(event.objectId())
-                .title(title)
+                .title("Video incident: " + event.eventType())
                 .build();
 
-        // Единая точка публикации:
-        //   AuditEventListener   (BEFORE_COMMIT) → audit_log
-        //   OutboxListener       (BEFORE_COMMIT) → outbox_events → Kafka
-        // Никакого прямого OutboxPort в incident-модуле больше нет.
         events.dispatch(created);
 
         log.info("Incident created from video event: incidentId={}, number={}, severity={}",

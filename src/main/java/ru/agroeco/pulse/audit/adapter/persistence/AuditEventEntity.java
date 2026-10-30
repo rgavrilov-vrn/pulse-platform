@@ -1,19 +1,11 @@
 package ru.agroeco.pulse.audit.adapter.persistence;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
+import ru.agroeco.pulse.audit.domain.AuditEventId;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -21,17 +13,21 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "audit_log", schema = "audit")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@IdClass(AuditEventId.class)
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AuditEventEntity {
 
+    /**
+     * Composite PK (id, occurred_at) — обязательное условие для
+     * партиционированной таблицы в Postgres (partition key должен быть в PK).
+     *
+     * UUID генерится на клиенте: BIGSERIAL/IDENTITY несовместим с composite PK.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @UuidGenerator
+    private UUID id;
 
+    @Id
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
 
@@ -47,12 +43,7 @@ public class AuditEventEntity {
     @Column(name = "entity_table", nullable = false, length = 100)
     private String entityTable;
 
-    /**
-     * Аудит-события без привязки к сущности легитимны:
-     * USER_AUTHENTICATION_FAILED, USER_LOGGED_OUT и т.п.
-     *
-     * В БД: audit.audit_log.entity_id DROP NOT NULL (миграция 009).
-     */
+    /** Nullable: auth-события (USER_AUTHENTICATION_FAILED) не имеют сущности. */
     @Column(name = "entity_id")
     private UUID entityId;
 
@@ -70,7 +61,6 @@ public class AuditEventEntity {
     @Column(name = "source_ip")
     private InetAddress sourceIp;
 
-    /** UA может быть длиннее 255 — увеличили до 512. */
     @Column(name = "user_agent", length = 512)
     private String userAgent;
 

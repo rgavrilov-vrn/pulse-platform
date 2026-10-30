@@ -22,13 +22,17 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    // ВАЖНО: именно интерфейс Spring Security — platform не зависит от auth модуля
+    // ТОЛЬКО интерфейс Spring Security.
+    // platform не должен знать про auth.application.AppUserDetailsService.
     private final UserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
-            throws ServletException, IOException {
-        log.info("Incoming request: {} {}", request.getMethod(), request.getRequestURI());
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) throws ServletException, IOException {
+
+        log.debug("Incoming request: {} {}", request.getMethod(), request.getRequestURI());
+
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             try {

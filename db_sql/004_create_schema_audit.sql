@@ -53,3 +53,33 @@ COMMENT ON COLUMN audit.audit_log.user_agent     IS 'User-Agent клиента';
 
 COMMENT ON TABLE  audit.audit_log_2026        IS 'Партиция audit_log за 2026 год.';
 COMMENT ON TABLE  audit.audit_log_default     IS 'Default-партиция audit_log (fallback для дат вне объявленных диапазонов).';
+
+-- 009_audit_log_pk_to_uuid.sql
+-- -------------------------------------------------------------
+-- audit.audit_log.id: BIGSERIAL → UUID.
+--
+-- Зачем: DDL объявляет PRIMARY KEY (id, occurred_at) — обязательное
+-- условие для партиционированной таблицы. JPA не может смоделировать
+-- @GeneratedValue(IDENTITY) с composite PK. Переход на UUID генерирует
+-- id на клиенте (Hibernate @UuidGenerator), что совместимо с composite.
+--
+-- ВНИМАНИЕ: id — surrogate, нигде не используется как FK. DROP COLUMN
+-- безопасен. На больших таблицах ALTER ADD COLUMN с DEFAULT может
+-- выполняться долго — на проде применять через maintenance window.
+-- -------------------------------------------------------------
+
+BEGIN;
+
+ALTER TABLE audit.audit_log DROP CONSTRAINT IF EXISTS audit_log_pkey;
+
+ALTER TABLE audit.audit_log DROP COLUMN IF EXISTS id;
+
+ALTER TABLE audit.audit_log
+    ADD COLUMN id UUID NOT NULL DEFAULT gen_random_uuid();
+
+ALTER TABLE audit.audit_log
+    ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id, occurred_at);
+
+DROP SEQUENCE IF EXISTS audit.audit_log_id_seq;
+
+COMMIT;

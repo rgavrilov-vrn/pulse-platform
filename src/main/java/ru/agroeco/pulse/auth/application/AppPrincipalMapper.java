@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.security;
+package ru.agroeco.pulse.auth.application;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
@@ -8,16 +8,13 @@ import ru.agroeco.pulse.auth.domain.RoleEntity;
 import ru.agroeco.pulse.auth.domain.RolePermissionEntity;
 import ru.agroeco.pulse.auth.domain.UserEntity;
 import ru.agroeco.pulse.auth.domain.UserRoleEntity;
+import ru.agroeco.pulse.platform.security.AppPrincipal;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
-/**
- * Строит AppPrincipal из UserEntity.
- * Права берутся ТОЛЬКО из БД: user_roles → roles → role_permissions → permissions.
- * Никаких хардкод-маппингов, как было раньше для ADMIN.
- */
 @Component
 @Slf4j
 public class AppPrincipalMapper {
@@ -29,13 +26,13 @@ public class AppPrincipalMapper {
             RoleEntity role = userRole.getRole();
             String roleCode = role.getCode();
 
-            // 1) ROLE_<CODE> — для @PreAuthorize("hasRole('ADMIN')")
-            authorities.add(new SimpleGrantedAuthority("ROLE_" + roleCode.toUpperCase()));
+            authorities.add(new SimpleGrantedAuthority(
+                    "ROLE_" + roleCode.toUpperCase(Locale.ROOT)));
 
-            // 2) Гранулярные permissions — для @PreAuthorize("hasAuthority('incident:read')")
             for (RolePermissionEntity rp : role.getPermissions()) {
                 if (rp.getPermission() == null) {
-                    log.warn("Role '{}' has dangling role_permission record without permission — skipped", roleCode);
+                    log.warn("Role '{}' has dangling role_permission record without permission — skipped",
+                            roleCode);
                     continue;
                 }
                 authorities.add(new SimpleGrantedAuthority(rp.getPermission().getCode()));
@@ -46,7 +43,6 @@ public class AppPrincipalMapper {
                 user.getId(),
                 user.getLogin(),
                 user.getPasswordHash(),
-                new ArrayList<>(authorities)
-        );
+                new ArrayList<>(authorities));
     }
 }
