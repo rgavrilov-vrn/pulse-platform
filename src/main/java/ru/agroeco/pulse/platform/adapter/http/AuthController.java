@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.auth.adapter.http;
+package ru.agroeco.pulse.platform.adapter.http;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -14,7 +14,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
-import ru.agroeco.pulse.auth.security.AppPrincipal;
+import ru.agroeco.pulse.platform.security.AppPrincipal;
 import ru.agroeco.pulse.platform.application.dto.TokenRequest;
 import ru.agroeco.pulse.platform.application.dto.TokenResponse;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticated;

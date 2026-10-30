@@ -12,7 +12,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import ru.agroeco.pulse.refs.api.support.QuerySupport;
+import ru.agroeco.pulse.platform.api.support.QuerySupport;
 import ru.agroeco.pulse.refs.application.CreateFacilityUseCase;
 import ru.agroeco.pulse.refs.domain.Facility;
 import ru.agroeco.pulse.refs.infrastructure.persistence.FacilityRepository;

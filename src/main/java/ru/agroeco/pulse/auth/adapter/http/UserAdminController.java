@@ -17,7 +17,7 @@ import ru.agroeco.pulse.auth.adapter.persistence.UserRepository;
 import ru.agroeco.pulse.auth.domain.UserEntity;
 import ru.agroeco.pulse.auth.domain.UserRoleEntity;
 import ru.agroeco.pulse.auth.domain.UserRoleId;
-import ru.agroeco.pulse.auth.security.AppPrincipal;
+import ru.agroeco.pulse.platform.security.AppPrincipal;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
 
 import java.nio.charset.StandardCharsets;

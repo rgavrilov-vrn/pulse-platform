@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.incident.api.IncidentCreated;
+import ru.agroeco.pulse.incident.domain.event.IncidentCreated;
 import ru.agroeco.pulse.incidentorchestrator.application.RouteIncidentUseCase;
 import ru.agroeco.pulse.outbox.api.ProcessedEventPort;
 import tools.jackson.core.JacksonException;

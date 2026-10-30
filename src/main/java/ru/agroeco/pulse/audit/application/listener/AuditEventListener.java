@@ -14,7 +14,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import ru.agroeco.pulse.audit.adapter.persistence.AuditEventEntity;
 import ru.agroeco.pulse.audit.adapter.persistence.AuditEventRepository;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
-import ru.agroeco.pulse.auth.security.AppPrincipal;
+import ru.agroeco.pulse.platform.security.AppPrincipal;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;

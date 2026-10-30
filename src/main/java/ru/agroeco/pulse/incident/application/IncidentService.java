@@ -61,6 +61,7 @@ public class IncidentService {
         incidents.save(incident);
         log.info("Incident created: id={}, number={}, source={}", incident.getId(), incident.getNumber(), sourceCode);
 
+        // Фрагмент метода create — без изменений по логике, только новые nullable-поля
         events.dispatch(IncidentCreated.builder()
                 .incidentId(incident.getId())
                 .number(incident.getNumber())
@@ -70,6 +71,8 @@ public class IncidentService {
                 .eventTime(incident.getEventTime())
                 .actorId(actorId)
                 .occurredAt(now)
+                // sourceEventId, sourceEventType, videoServerId, cameraId,
+                // channelId, objectId, title — остаются null (ручной путь)
                 .build());
 
         return toDetails(incident);
@@ -77,18 +80,7 @@ public class IncidentService {
 
     // -------------------------------------------------------------------- LIST
     @Transactional(readOnly = true)
-    public PageResponse<IncidentSummary> list(IncidentFilter f, Pageable pageable) {
-        var predicates = new java.util.ArrayList<Specification<IncidentEntity>>();
-
-        if (f.status() != null)     predicates.add((r, q, cb) -> cb.equal(r.get("status"), f.status()));
-        if (f.severity() != null)   predicates.add((r, q, cb) -> cb.equal(r.get("severity"), f.severity()));
-        if (f.source() != null)     predicates.add((r, q, cb) -> cb.equal(r.get("source"), f.source()));
-        if (f.assignedTo() != null) predicates.add((r, q, cb) -> cb.equal(r.get("assignedTo"), f.assignedTo()));
-        if (f.eventFrom() != null)  predicates.add((r, q, cb) -> cb.greaterThanOrEqualTo(r.get("eventTime"), f.eventFrom()));
-        if (f.eventTo() != null)    predicates.add((r, q, cb) -> cb.lessThanOrEqualTo(r.get("eventTime"), f.eventTo()));
-
-        Specification<IncidentEntity> spec = Specification.allOf(predicates);
-
+    public PageResponse<IncidentSummary> list(Specification<IncidentEntity> spec, Pageable pageable) {
         Page<IncidentEntity> page = incidents.findAll(spec, pageable);
         return PageResponse.of(page, this::toSummary);
     }

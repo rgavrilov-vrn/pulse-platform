@@ -27,12 +27,33 @@ public interface DomainEvent {
         return null;
     }
 
-    /** Снимок «после». По умолчанию — само событие. */
+    /** Снимок «после» для audit. По умолчанию — само событие. */
     default Object newDataSnapshot() {
         return this;
     }
 
-    /** Публиковать ли в outbox. Ручной аудит — нет. */
+    /**
+     * Тип события для outbox_events.event_type (и роутинга в Kafka-топик).
+     *
+     * По умолчанию — AuditAction.name() (UPPER_SNAKE, как в audit_log).
+     * Интеграционные события могут переопределить, если Kafka-контракт
+     * исторически использует другой стиль (PascalCase, см. IncidentCreated).
+     */
+    default String outboxEventType() {
+        return eventType().getValue();
+    }
+
+    /**
+     * Payload для outbox/Kafka.
+     *
+     * По умолчанию — само событие. Интеграционные события могут вернуть
+     * обогащённый DTO, если domain-событие беднее, чем нужно consumer'ам.
+     */
+    default Object outboxPayload() {
+        return this;
+    }
+
+    /** Публиковать ли в outbox. Ручной аудит и auth-события — нет. */
     default boolean publishToOutbox() {
         return true;
     }

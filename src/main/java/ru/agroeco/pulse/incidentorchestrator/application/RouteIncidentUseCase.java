@@ -6,7 +6,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.incident.api.IncidentCreated;
+import ru.agroeco.pulse.incident.domain.event.IncidentCreated;
 import ru.agroeco.pulse.incidentorchestrator.api.IncidentOrchestratorProperties;
 import ru.agroeco.pulse.notification.api.NotificationRequested;
 import ru.agroeco.pulse.outbox.api.OutboxMessage;
@@ -26,7 +26,7 @@ public class RouteIncidentUseCase {
 
     @Transactional
     public NotificationRequested handle(IncidentCreated event) {
-        boolean critical = "CRITICAL".equalsIgnoreCase(event.severity());
+        boolean critical = "CRITICAL".equalsIgnoreCase(event.severity().toString());
         String channel = critical
             ? properties.getCriticalChannel()
             : properties.getDefaultChannel();

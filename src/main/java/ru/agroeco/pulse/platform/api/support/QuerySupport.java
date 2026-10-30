@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.refs.api.support;
+package ru.agroeco.pulse.platform.api.support;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -14,7 +14,13 @@ public final class QuerySupport {
 
     private QuerySupport() {}
 
-    /** Оставляет только разрешённые поля сортировки, капает size, дефолтит направление. */
+    /**
+     * Санитизация Pageable:
+     *  - оставляет только разрешённые поля сортировки;
+     *  - если после фильтрации ничего не осталось — дефолтная сортировка;
+     *  - ограничивает size сверху (MAX_PAGE_SIZE), чтобы клиент не мог
+     *    запросить ?size=1000000 и получить OOM.
+     */
     public static Pageable sanitize(Pageable pageable, Set<String> allowed,
                                     String defaultField, Sort.Direction defaultDirection) {
         List<Sort.Order> valid = pageable.getSort().stream()

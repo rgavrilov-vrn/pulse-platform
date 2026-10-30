@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.auth.security;
+package ru.agroeco.pulse.platform.security;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
