@@ -6,15 +6,12 @@ import org.slf4j.MDC;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import tools.jackson.databind.ObjectMapper;
 import ru.agroeco.pulse.audit.adapter.persistence.AuditEventEntity;
-import ru.agroeco.pulse.audit.adapter.persistence.AuditEventRepository;
 import ru.agroeco.pulse.audit.domain.exception.AuditException;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.platform.security.AppPrincipal;
@@ -45,7 +42,7 @@ public class AuditEventListener {
             "USER_LOGGED_OUT"
     );
 
-    private final AuditEventRepository repository;
+    private final AuditEventWriter writer;   // ← вместо repository
     private final ObjectMapper mapper;
 
     /**
@@ -56,11 +53,9 @@ public class AuditEventListener {
             phase = TransactionPhase.BEFORE_COMMIT,
             fallbackExecution = true)
     public void on(DomainEvent event) {
-        if (isFailOpen(event)) {
-            return; // обрабатывается onAuth
-        }
+        if (isFailOpen(event)) return;
         try {
-            repository.save(buildEntity(event));
+            writer.writeInTransaction(buildEntity(event));
         } catch (RuntimeException ex) {
             log.error("Audit persistence failed for action={} entity={}.{}/{}",
                     event.eventType().getValue(),
@@ -81,13 +76,10 @@ public class AuditEventListener {
     @TransactionalEventListener(
             phase = TransactionPhase.AFTER_COMPLETION,
             fallbackExecution = true)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onAuth(DomainEvent event) {
-        if (!isFailOpen(event)) {
-            return; // обрабатывается on
-        }
+        if (!isFailOpen(event)) return;
         try {
-            repository.save(buildEntity(event));
+            writer.writeIsolated(buildEntity(event));   // ← proxy целиком внутри try
         } catch (RuntimeException ex) {
             log.error("Auth audit failed for action={} entityId={}",
                     event.eventType().getValue(), event.entityId(), ex);

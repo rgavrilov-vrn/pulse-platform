@@ -2,7 +2,6 @@ package ru.agroeco.pulse.platform.domain.event;
 
 import lombok.Builder;
 import lombok.With;
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -19,8 +18,8 @@ public record UserAuthenticationFailed(
     public UserAuthenticationFailed {}
 
     @Override
-    public AuditAction eventType() {
-        return AuditAction.USER_AUTHENTICATION_FAILED;
+    public DomainEventType eventType() {
+        return DomainEventType.USER_AUTHENTICATION_FAILED;
     }
 
     @Override

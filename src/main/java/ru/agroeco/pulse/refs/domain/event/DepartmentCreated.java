@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.refs.domain.event;
 
 import lombok.Builder;
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 
 import java.time.Instant;
@@ -18,7 +18,7 @@ public record DepartmentCreated(
         Instant occurredAt
 ) implements DomainEvent {
 
-    @Override public AuditAction eventType() { return AuditAction.DEPARTMENT_CREATED; }
+    @Override public DomainEventType eventType() { return DomainEventType.DEPARTMENT_CREATED; }
     @Override public UUID entityId() { return departmentId; }
     @Override public String entitySchema() { return "ref"; }
     @Override public String entityTable() { return "departments"; }

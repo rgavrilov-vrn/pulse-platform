@@ -55,6 +55,7 @@ public class AuditEventEntity {
      * даёт implicit cast varchar→inet на стороне Postgres.
      */
     @Column(name = "source_ip", columnDefinition = "inet")
+    @JdbcTypeCode(SqlTypes.INET)
     private InetAddress sourceIp;
 
     @Column(name = "user_agent", length = 512)

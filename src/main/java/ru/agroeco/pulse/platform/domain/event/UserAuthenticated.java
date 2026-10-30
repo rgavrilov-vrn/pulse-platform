@@ -2,7 +2,6 @@ package ru.agroeco.pulse.platform.domain.event;
 
 import lombok.Builder;
 import lombok.With;
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -16,8 +15,8 @@ public record UserAuthenticated(
 ) implements DomainEvent {
 
     @Override
-    public AuditAction eventType() {
-        return AuditAction.USER_AUTHENTICATED;
+    public DomainEventType eventType() {
+        return DomainEventType.USER_AUTHENTICATED;
     }
 
     @Override

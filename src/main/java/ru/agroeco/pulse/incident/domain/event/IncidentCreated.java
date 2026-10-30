@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.incident.domain.event;
 
 import lombok.Builder;
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 import ru.agroeco.pulse.incident.domain.IncidentStatus;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
@@ -31,7 +31,7 @@ public record IncidentCreated(
         String title
 ) implements DomainEvent {
 
-    @Override public AuditAction eventType() { return AuditAction.INCIDENT_CREATED; }
+    @Override public DomainEventType eventType() { return DomainEventType.INCIDENT_CREATED; }
     @Override public UUID entityId() { return incidentId; }
     @Override public String entitySchema() { return "incident"; }
     @Override public String entityTable() { return "incidents"; }

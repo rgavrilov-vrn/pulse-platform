@@ -1,13 +1,11 @@
 package ru.agroeco.pulse.platform.domain.event;
 
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
-
 import java.time.Instant;
 import java.util.UUID;
 
 public interface DomainEvent {
 
-    AuditAction eventType();
+    DomainEventType eventType();
     UUID entityId();
     String entitySchema();
     String entityTable();

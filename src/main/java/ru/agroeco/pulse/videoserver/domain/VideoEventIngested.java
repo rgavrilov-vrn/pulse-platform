@@ -2,7 +2,7 @@ package ru.agroeco.pulse.videoserver.domain;
 
 
 
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.videoserver.api.EventSeverity;
 import ru.agroeco.pulse.videoserver.api.VideoEventType;
@@ -25,8 +25,8 @@ public record VideoEventIngested(
 ) implements DomainEvent {
 
     @Override
-    public AuditAction eventType() {
-        return AuditAction.VIDEO_EVENT_INGESTED;
+    public DomainEventType eventType() {
+        return DomainEventType.VIDEO_EVENT_INGESTED;
     }
 
     @Override

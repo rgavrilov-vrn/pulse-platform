@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.refs.domain.event;
 
 import lombok.Builder;
-import ru.agroeco.pulse.audit.domain.event.AuditAction;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 
 import java.time.Instant;
@@ -20,7 +20,7 @@ public record ZoneCreated(
         Instant occurredAt
 ) implements DomainEvent {
 
-    @Override public AuditAction eventType() { return AuditAction.ZONE_CREATED; }
+    @Override public DomainEventType eventType() { return DomainEventType.ZONE_CREATED; }
     @Override public UUID entityId() { return zoneId; }
     @Override public String entitySchema() { return "ref"; }
     @Override public String entityTable() { return "zones"; }

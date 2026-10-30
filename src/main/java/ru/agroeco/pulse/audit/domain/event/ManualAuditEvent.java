@@ -1,6 +1,7 @@
 package ru.agroeco.pulse.audit.domain.event;
 
 import lombok.Builder;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 
 import java.time.Instant;
@@ -8,7 +9,7 @@ import java.util.UUID;
 
 @Builder
 public record ManualAuditEvent(
-        AuditAction action,
+        DomainEventType action,
         String schema,
         String table,
         UUID entityId,
@@ -19,7 +20,7 @@ public record ManualAuditEvent(
 ) implements DomainEvent {
 
     @Override
-    public AuditAction eventType() {
+    public DomainEventType eventType() {
         return action;
     }
 

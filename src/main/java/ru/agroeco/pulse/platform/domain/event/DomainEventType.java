@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.audit.domain.event;
+package ru.agroeco.pulse.platform.domain.event;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +8,7 @@ import java.util.Optional;
 
 @Getter
 @RequiredArgsConstructor
-public enum AuditAction {
+public enum DomainEventType {
 
     // ---- auth ----
     USER_AUTHENTICATED("USER_AUTHENTICATED"),
@@ -43,7 +43,7 @@ public enum AuditAction {
 
     private final String value;
 
-    public static Optional<AuditAction> fromValue(String value) {
+    public static Optional<DomainEventType> fromValue(String value) {
         if (value == null) return Optional.empty();
         return Arrays.stream(values())
                 .filter(a -> a.value.equals(value))
