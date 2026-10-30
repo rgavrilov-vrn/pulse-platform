@@ -5,13 +5,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.api.support.QuerySupport;
 import ru.agroeco.pulse.refs.application.CreateDepartmentUseCase;
 import ru.agroeco.pulse.refs.domain.Department;
@@ -24,7 +25,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/v1/ref/departments")
 @RequiredArgsConstructor
-@Tag(name = "Reference", description = "Справочник подразделений")
+@Tag(name = "Reference · Departments", description = "Справочник подразделений")
 public class DepartmentController {
 
     private static final Set<String> ALLOWED_SORT = Set.of(
@@ -35,6 +36,7 @@ public class DepartmentController {
     private final DepartmentRepository repository;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ref:write')")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create department")
     public DepartmentResponse create(@Valid @RequestBody CreateDepartmentRequest request) {
@@ -42,9 +44,10 @@ public class DepartmentController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('ref:read')")
     @Operation(summary = "List departments",
             description = "Фильтры: code (exact), search (по name, substring), isActive.")
-    public Page<DepartmentResponse> list(
+    public PageResponse<DepartmentResponse> list(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean isActive,
@@ -52,7 +55,7 @@ public class DepartmentController {
             Pageable pageable
     ) {
         Pageable safe = QuerySupport.sanitize(pageable, ALLOWED_SORT, DEFAULT_SORT, Sort.Direction.ASC);
-        return repository.findAll(buildSpec(code, search, isActive), safe).map(this::toResponse);
+        return PageResponse.of(repository.findAll(buildSpec(code, search, isActive), safe), this::toResponse);
     }
 
     private Specification<Department> buildSpec(String code, String search, Boolean isActive) {

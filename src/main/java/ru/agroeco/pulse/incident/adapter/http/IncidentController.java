@@ -20,6 +20,7 @@ import ru.agroeco.pulse.incident.application.IncidentService;
 import ru.agroeco.pulse.incident.domain.IncidentEntity;
 import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 import ru.agroeco.pulse.incident.domain.IncidentStatus;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.api.support.QuerySupport;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 
@@ -38,6 +39,7 @@ public class IncidentController {
     private static final Set<String> ALLOWED_SORT = Set.of(
             "number", "eventTime", "createdAt", "updatedAt", "status", "severity", "source", "id");
     private static final String DEFAULT_SORT = "eventTime";
+    private static final String HISTORY_DEFAULT_SORT = "changedAt";
 
     private final IncidentService incidentService;
 
@@ -58,7 +60,7 @@ public class IncidentController {
     @Operation(summary = "List incidents with filters and pagination",
             description = "Фильтры: status, severity, source (exact), assignedTo, "
                     + "eventFrom/eventTo (ISO-8601, from ≤ to). "
-                    + "Sort: " + "number, eventTime, createdAt, updatedAt, status, severity, source, id. "
+                    + "Sort: number, eventTime, createdAt, updatedAt, status, severity, source, id. "
                     + "Size ограничен 100.")
     public PageResponse<IncidentSummary> list(
             @RequestParam(required = false) IncidentStatus status,
@@ -69,21 +71,53 @@ public class IncidentController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant eventFrom,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant eventTo,
-            @PageableDefault(
-                    size = 20,
-                    sort = DEFAULT_SORT,
-                    direction = Sort.Direction.DESC)
+            @PageableDefault(size = 20, sort = DEFAULT_SORT, direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
         validateRange(eventFrom, eventTo);
-
         Pageable safe = QuerySupport.sanitize(
                 pageable, ALLOWED_SORT, DEFAULT_SORT, Sort.Direction.DESC);
+        return incidentService.list(
+                buildSpec(status, severity, source, assignedTo, eventFrom, eventTo), safe);
+    }
 
-        Specification<IncidentEntity> spec = buildSpec(
-                status, severity, source, assignedTo, eventFrom, eventTo);
+    // --------------------------------------------------------------- GET BY ID
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('incident:read')")
+    @Operation(summary = "Get incident by id")
+    public IncidentDetails getById(@PathVariable UUID id) {
+        return incidentService.getById(id);
+    }
 
-        return incidentService.list(spec, safe);
+    // ----------------------------------------------------------- LIST COMMENTS
+    @GetMapping("/{id}/comments")
+    @PreAuthorize("hasAuthority('incident:read')")
+    @Operation(summary = "List incident comments (paginated, not deleted)",
+            description = "Sort: createdAt, id. Default: createdAt, DESC.")
+    public PageResponse<CommentView> listComments(
+            @PathVariable UUID id,
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        // Явно ограничиваем сортировку по существующим полям.
+        Pageable safe = QuerySupport.sanitize(
+                pageable, Set.of("createdAt", "id"), "createdAt", Sort.Direction.DESC);
+        return incidentService.listComments(id, safe);
+    }
+
+    // -------------------------------------------------------------- LIST HISTORY
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAuthority('incident:read')")
+    @Operation(summary = "List incident status change history (paginated)",
+            description = "Sort: changedAt, id. Default: changedAt, DESC.")
+    public PageResponse<StatusHistoryView> listHistory(
+            @PathVariable UUID id,
+            @PageableDefault(size = 50, sort = HISTORY_DEFAULT_SORT, direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        Pageable safe = QuerySupport.sanitize(
+                pageable, Set.of("changedAt", "id"), HISTORY_DEFAULT_SORT, Sort.Direction.DESC);
+        return incidentService.listHistory(id, safe);
     }
 
     // ----------------------------------------------------------- CHANGE STATUS
@@ -111,47 +145,21 @@ public class IncidentController {
 
     // --------------------------------------------------------------- helpers
 
-    /**
-     * Строит Specification по фильтрам. Живёт в контроллере — как в
-     * refs/videoserver: сервис получает уже готовый spec и делает
-     * findAll + маппинг, не зная деталей фильтрации.
-     */
     private Specification<IncidentEntity> buildSpec(
-            IncidentStatus status,
-            IncidentSeverity severity,
-            String source,
-            UUID assignedTo,
-            Instant eventFrom,
-            Instant eventTo
-    ) {
+            IncidentStatus status, IncidentSeverity severity, String source,
+            UUID assignedTo, Instant eventFrom, Instant eventTo) {
         return (root, q, cb) -> {
             List<Predicate> p = new ArrayList<>();
-
-            if (status != null) {
-                p.add(cb.equal(root.get("status"), status));
-            }
-            if (severity != null) {
-                p.add(cb.equal(root.get("severity"), severity));
-            }
-            // isBlank-проверка: раньше ?source= (пустая строка) давал
-            // фильтр WHERE source = '', что всегда давало пустой результат.
-            if (source != null && !source.isBlank()) {
-                p.add(cb.equal(root.get("source"), source));
-            }
-            if (assignedTo != null) {
-                p.add(cb.equal(root.get("assignedTo"), assignedTo));
-            }
-            if (eventFrom != null) {
-                p.add(cb.greaterThanOrEqualTo(root.get("eventTime"), eventFrom));
-            }
-            if (eventTo != null) {
-                p.add(cb.lessThanOrEqualTo(root.get("eventTime"), eventTo));
-            }
+            if (status != null)     p.add(cb.equal(root.get("status"), status));
+            if (severity != null)   p.add(cb.equal(root.get("severity"), severity));
+            if (source != null && !source.isBlank()) p.add(cb.equal(root.get("source"), source));
+            if (assignedTo != null) p.add(cb.equal(root.get("assignedTo"), assignedTo));
+            if (eventFrom != null)  p.add(cb.greaterThanOrEqualTo(root.get("eventTime"), eventFrom));
+            if (eventTo != null)    p.add(cb.lessThanOrEqualTo(root.get("eventTime"), eventTo));
             return cb.and(p.toArray(new Predicate[0]));
         };
     }
 
-    /** Та же проверка, что в VideoEventQueryController. */
     private void validateRange(Instant from, Instant to) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new BusinessRuleException(

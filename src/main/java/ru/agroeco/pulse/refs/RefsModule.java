@@ -4,7 +4,7 @@ import org.springframework.modulith.ApplicationModule;
 
 @ApplicationModule(
         displayName = "Reference Data",
-        allowedDependencies = {"platform"}
+        allowedDependencies = {"platform", "audit"}
 )
 public interface RefsModule {
 }

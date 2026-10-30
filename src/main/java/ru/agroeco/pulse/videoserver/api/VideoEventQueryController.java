@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.videoserver.domain.NormalizedVideoEvent;
 import ru.agroeco.pulse.videoserver.infrastructure.persistence.NormalizedVideoEventRepository;
@@ -53,26 +54,22 @@ public class VideoEventQueryController {
                             description = "Page size (1..100)", example = "20")
             }
     )
-    public Page<VideoEventNormalized> list(
+    public PageResponse<VideoEventNormalized> list(
             @RequestParam(required = false) UUID videoServerId,
             @RequestParam(required = false) UUID cameraId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
-            @PageableDefault(
-                    size = 20,
-                    sort = DEFAULT_SORT_FIELD,
-                    direction = Sort.Direction.DESC)
+            @PageableDefault(size = 20, sort = DEFAULT_SORT_FIELD, direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
         Pageable safePageable = sanitize(pageable);
-
         try {
             validateRange(from, to);
-            return fetchPage(videoServerId, cameraId, from, to, safePageable)
-                    .map(this::toDto);
-
+            return PageResponse.of(
+                    fetchPage(videoServerId, cameraId, from, to, safePageable),
+                    this::toDto);
         } catch (BusinessRuleException ex) {
             log.warn("Invalid query for video events: {}", ex.getMessage());
             throw ex;

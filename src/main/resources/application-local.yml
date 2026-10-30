@@ -1,39 +1,19 @@
+# application-local.yml
+# Только overrides поверх application.yml.
+# Всё, что совпадает с application.yml (datasource, kafka, goodwan, server.*),
+# здесь НЕ дублируется — Spring Boot мержит профили поверх base.
+
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/pulse_platform
-    username: pulse_platform_app
-    password: password@pulse.ru
-  kafka:
-    bootstrap-servers: localhost:9092
   jpa:
     show-sql: true
-  main:
-    web-application-type: servlet
   output:
     ansi:
       enabled: always
+
 logging:
+  # В base (application.yml) SQL-логи выключены (INFO) — включаем только в local.
   level:
-    root: INFO
-    ru.agroeco.pulse.platform: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
   pattern:
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} --- [%t] %clr(%logger{36}){cyan} : %m%n%wEx"
-  charset:
-    console: UTF-8
-    file: UTF-8
-
-server:
-  port: ${SERVER_PORT:8080}
-  servlet:
-    context-path: /pulse-platform
-
-goodwan:
-  base-url: https://my.goodwan.ru/api
-  username: ${GOODWAN_USERNAME}
-  password: ${GOODWAN_PASSWORD}
-  sync:
-    enabled: true
-    interval: PT1M
-    page-size: 1000
-  devices:
-    - 9441

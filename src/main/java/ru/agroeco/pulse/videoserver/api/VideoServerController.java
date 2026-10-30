@@ -10,7 +10,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -24,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.videoserver.application.CreateVideoServerUseCase;
 import ru.agroeco.pulse.videoserver.domain.VideoServer;
@@ -94,17 +94,14 @@ public class VideoServerController {
                             description = "Business rule violated (invalid status)")
             }
     )
-    public Page<VideoServerResponse> list(
+    public PageResponse<VideoServerResponse> list(
             @RequestParam(required = false) String source,
             @RequestParam(required = false) UUID objectId,
             @RequestParam(required = false) UUID zoneId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) String search,
-            @PageableDefault(
-                    size = 20,
-                    sort = DEFAULT_SORT_FIELD,
-                    direction = Sort.Direction.ASC)
+            @PageableDefault(size = 20, sort = DEFAULT_SORT_FIELD, direction = Sort.Direction.ASC)
             Pageable pageable
     ) {
         Pageable safePageable = sanitize(pageable);
@@ -113,8 +110,8 @@ public class VideoServerController {
             VideoServerStatus statusFilter = parseStatusFilter(status);
             Specification<VideoServer> spec = buildSpec(
                     source, objectId, zoneId, statusFilter, isActive, search);
-            return repository.findAll(spec, safePageable).map(this::toResponse);
-
+            return PageResponse.of(
+                    repository.findAll(spec, safePageable), this::toResponse);
         } catch (BusinessRuleException ex) {
             log.warn("Invalid query for video servers: {}", ex.getMessage());
             throw ex;

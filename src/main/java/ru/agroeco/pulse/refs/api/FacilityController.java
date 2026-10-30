@@ -5,13 +5,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.api.support.QuerySupport;
 import ru.agroeco.pulse.refs.application.CreateFacilityUseCase;
 import ru.agroeco.pulse.refs.domain.Facility;
@@ -24,7 +25,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/v1/ref/facilities")
 @RequiredArgsConstructor
-@Tag(name = "Reference", description = "Справочник объектов (facilities)")
+@Tag(name = "Reference · Facilities", description = "Справочник объектов (facilities)")
 public class FacilityController {
 
     private static final Set<String> ALLOWED_SORT = Set.of(
@@ -35,6 +36,7 @@ public class FacilityController {
     private final FacilityRepository repository;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ref:write')")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create facility",
             description = "code уникален. Дубликат → 422 FACILITY_CODE_ALREADY_EXISTS.")
@@ -43,9 +45,10 @@ public class FacilityController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('ref:read')")
     @Operation(summary = "List facilities",
             description = "Фильтры: code (exact), search (по name, substring), isActive.")
-    public Page<FacilityResponse> list(
+    public PageResponse<FacilityResponse> list(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean isActive,
@@ -53,7 +56,7 @@ public class FacilityController {
             Pageable pageable
     ) {
         Pageable safe = QuerySupport.sanitize(pageable, ALLOWED_SORT, DEFAULT_SORT, Sort.Direction.ASC);
-        return repository.findAll(buildSpec(code, search, isActive), safe).map(this::toResponse);
+        return PageResponse.of(repository.findAll(buildSpec(code, search, isActive), safe), this::toResponse);
     }
 
     private Specification<Facility> buildSpec(String code, String search, Boolean isActive) {

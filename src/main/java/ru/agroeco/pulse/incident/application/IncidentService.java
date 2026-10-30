@@ -11,6 +11,7 @@ import ru.agroeco.pulse.incident.adapter.http.dto.*;
 import ru.agroeco.pulse.incident.adapter.persistence.*;
 import ru.agroeco.pulse.incident.domain.*;
 import ru.agroeco.pulse.incident.domain.event.*;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
@@ -58,10 +59,10 @@ public class IncidentService {
                 .metadata(req.metadata() != null ? req.metadata() : Map.of())
                 .build();
 
-        incidents.save(incident);
-        log.info("Incident created: id={}, number={}, source={}", incident.getId(), incident.getNumber(), sourceCode);
+        incidents.saveAndFlush(incident);
+        log.info("Incident created: id={}, number={}, source={}",
+                incident.getId(), incident.getNumber(), sourceCode);
 
-        // Фрагмент метода create — без изменений по логике, только новые nullable-поля
         events.dispatch(IncidentCreated.builder()
                 .incidentId(incident.getId())
                 .number(incident.getNumber())
@@ -71,8 +72,6 @@ public class IncidentService {
                 .eventTime(incident.getEventTime())
                 .actorId(actorId)
                 .occurredAt(now)
-                // sourceEventId, sourceEventType, videoServerId, cameraId,
-                // channelId, objectId, title — остаются null (ручной путь)
                 .build());
 
         return toDetails(incident);
@@ -83,6 +82,34 @@ public class IncidentService {
     public PageResponse<IncidentSummary> list(Specification<IncidentEntity> spec, Pageable pageable) {
         Page<IncidentEntity> page = incidents.findAll(spec, pageable);
         return PageResponse.of(page, this::toSummary);
+    }
+
+    // ---------------------------------------------------------------- GET BY ID
+    @Transactional(readOnly = true)
+    public IncidentDetails getById(UUID id) {
+        IncidentEntity incident = incidents.findById(id)
+                .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
+        return toDetails(incident);
+    }
+
+    // ------------------------------------------------------------- LIST COMMENTS
+    @Transactional(readOnly = true)
+    public PageResponse<CommentView> listComments(UUID incidentId, Pageable pageable) {
+        if (!incidents.existsById(incidentId)) {
+            throw new NotFoundException("Incident not found: " + incidentId);
+        }
+        Page<CommentEntity> page = comments.findByIncidentIdAndDeletedFalse(incidentId, pageable);
+        return PageResponse.of(page, this::toCommentView);
+    }
+
+    // -------------------------------------------------------------- LIST HISTORY
+    @Transactional(readOnly = true)
+    public PageResponse<StatusHistoryView> listHistory(UUID incidentId, Pageable pageable) {
+        if (!incidents.existsById(incidentId)) {
+            throw new NotFoundException("Incident not found: " + incidentId);
+        }
+        Page<StatusHistoryEntity> page = statusHistory.findByIncidentId(incidentId, pageable);
+        return PageResponse.of(page, this::toHistoryView);
     }
 
     // ----------------------------------------------------------- CHANGE STATUS
@@ -110,7 +137,6 @@ public class IncidentService {
         incident.setStatus(to);
         incident.setUpdatedBy(actorId);
 
-        // side-effects по типу статуса — по контракту DB
         switch (to) {
             case CONFIRMED -> { incident.setConfirmedAt(now); incident.setConfirmedBy(actorId); }
             case CLOSED    -> {
@@ -128,7 +154,7 @@ public class IncidentService {
             default -> { /* остальные переходы без side-effects */ }
         }
 
-        incidents.save(incident);
+        incidents.saveAndFlush(incident);
 
         statusHistory.save(StatusHistoryEntity.builder()
                 .incidentId(id)
@@ -165,7 +191,7 @@ public class IncidentService {
                 .body(req.body().trim())
                 .deleted(false)
                 .build();
-        comments.save(c);
+        comments.saveAndFlush(c);
 
         events.dispatch(IncidentCommentAdded.builder()
                 .incidentId(incidentId)
@@ -175,8 +201,7 @@ public class IncidentService {
                 .occurredAt(c.getCreatedAt() != null ? c.getCreatedAt() : Instant.now())
                 .build());
 
-        return new CommentView(c.getId(), c.getIncidentId(), c.getAuthorId(),
-                c.getCommentType(), c.getBody(), c.getCreatedAt());
+        return toCommentView(c);
     }
 
     // ---------------------------------------------------------------- MAPPERS
@@ -196,5 +221,16 @@ public class IncidentService {
                 i.getClosedAt(), i.getClosedBy(), i.getResolutionComment(),
                 i.getCancelledAt(), i.getCancelledBy(), i.getCancellationReason(),
                 i.getComment(), i.getMetadata());
+    }
+
+    private CommentView toCommentView(CommentEntity c) {
+        return new CommentView(c.getId(), c.getIncidentId(), c.getAuthorId(),
+                c.getCommentType(), c.getBody(), c.getCreatedAt());
+    }
+
+    private StatusHistoryView toHistoryView(StatusHistoryEntity h) {
+        return new StatusHistoryView(h.getId(), h.getIncidentId(),
+                h.getFromStatus(), h.getToStatus(), h.getChangedBy(),
+                h.getChangedAt(), h.getComment(), h.getRequestId());
     }
 }

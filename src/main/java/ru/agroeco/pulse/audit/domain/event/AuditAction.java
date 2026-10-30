@@ -15,17 +15,30 @@ public enum AuditAction {
     USER_AUTHENTICATION_FAILED("USER_AUTHENTICATION_FAILED"),
     USER_LOGGED_OUT("USER_LOGGED_OUT"),
 
-    // ---- User action ------
+    // ---- user management ----
     USER_CREATED("USER_CREATED"),
     USER_ROLE_CHANGED("USER_ROLE_CHANGED"),
     USER_DISABLED("USER_DISABLED"),
 
-    INCIDENT_CREATED ("INCIDENT_CREATED"),
-    INCIDENT_STATUS_CHANGED ("INCIDENT_STATUS_CHANGED"),
-    INCIDENT_COMMENT_ADDED ("INCIDENT_COMMENT_ADDED"),
+    // ---- incident ----
+    INCIDENT_CREATED("INCIDENT_CREATED"),
+    INCIDENT_STATUS_CHANGED("INCIDENT_STATUS_CHANGED"),
+    INCIDENT_COMMENT_ADDED("INCIDENT_COMMENT_ADDED"),
 
     // ---- videoserver ----
-    VIDEO_EVENT_INGESTED("VIDEO_EVENT_INGESTED")
+    VIDEO_EVENT_INGESTED("VIDEO_EVENT_INGESTED"),
+
+    // ---- refs: facilities (ref.objects) ----
+    FACILITY_CREATED("FACILITY_CREATED"),
+
+    // ---- refs: zones ----
+    ZONE_CREATED("ZONE_CREATED"),
+
+    // ---- refs: departments ----
+    DEPARTMENT_CREATED("DEPARTMENT_CREATED"),
+
+    // ---- refs: employees ----
+    EMPLOYEE_CREATED("EMPLOYEE_CREATED")
     ;
 
     private final String value;

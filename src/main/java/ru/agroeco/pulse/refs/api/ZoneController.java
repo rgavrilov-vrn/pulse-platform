@@ -5,13 +5,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.api.support.QuerySupport;
 import ru.agroeco.pulse.refs.application.CreateZoneUseCase;
 import ru.agroeco.pulse.refs.domain.Zone;
@@ -25,7 +26,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/ref/zones")
 @RequiredArgsConstructor
-@Tag(name = "Reference", description = "Справочник зон")
+@Tag(name = "Reference · Zones", description = "Справочник зон")
 public class ZoneController {
 
     private static final Set<String> ALLOWED_SORT = Set.of(
@@ -36,6 +37,7 @@ public class ZoneController {
     private final ZoneRepository repository;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ref:write')")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create zone",
             description = "(objectId, code) уникально. parentId должен принадлежать тому же objectId.")
@@ -44,10 +46,11 @@ public class ZoneController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('ref:read')")
     @Operation(summary = "List zones",
             description = "Фильтры: objectId, parentId, rootOnly (parent_id IS NULL), "
                     + "code (exact), search (по name, substring), isActive.")
-    public Page<ZoneResponse> list(
+    public PageResponse<ZoneResponse> list(
             @RequestParam(required = false) UUID objectId,
             @RequestParam(required = false) UUID parentId,
             @RequestParam(required = false) Boolean rootOnly,
@@ -58,9 +61,9 @@ public class ZoneController {
             Pageable pageable
     ) {
         Pageable safe = QuerySupport.sanitize(pageable, ALLOWED_SORT, DEFAULT_SORT, Sort.Direction.ASC);
-        return repository.findAll(
-                buildSpec(objectId, parentId, rootOnly, code, search, isActive), safe)
-                .map(this::toResponse);
+        return PageResponse.of(
+                repository.findAll(buildSpec(objectId, parentId, rootOnly, code, search, isActive), safe),
+                this::toResponse);
     }
 
     private Specification<Zone> buildSpec(UUID objectId, UUID parentId, Boolean rootOnly,

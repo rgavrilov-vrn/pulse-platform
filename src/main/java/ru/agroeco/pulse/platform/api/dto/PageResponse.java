@@ -1,10 +1,18 @@
-package ru.agroeco.pulse.incident.adapter.http.dto;
+package ru.agroeco.pulse.platform.api.dto;
 
 import org.springframework.data.domain.Page;
 
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Унифицированный контракт пагинации для всего API.
+ *
+ * Заменяет прямую сериализацию Spring PageImpl (служебные поля
+ * pageable/sort/first/last/numberOfElements/empty) на стабильный набор.
+ *
+ * Используется во всех модулях: refs, videoserver, incident.
+ */
 public record PageResponse<T>(
         List<T> content,
         int page,
@@ -20,5 +28,9 @@ public record PageResponse<T>(
                 p.getNumber(), p.getSize(),
                 p.getTotalElements(), p.getTotalPages(),
                 p.hasNext(), p.hasPrevious());
+    }
+
+    public static <T> PageResponse<T> of(Page<T> p) {
+        return of(p, Function.identity());
     }
 }
