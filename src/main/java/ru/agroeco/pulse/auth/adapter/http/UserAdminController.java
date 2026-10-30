@@ -1,5 +1,7 @@
 package ru.agroeco.pulse.auth.adapter.http;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor
+@Tag(name = "Admin", description = "Управление пользователями")
 public class UserAdminController {
 
     private final UserRepository users;
@@ -36,6 +39,7 @@ public class UserAdminController {
     @PreAuthorize("hasAuthority('user:write') and hasAuthority('user:assign_role')")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
+    @Operation(summary = "Create user")
     public UserView create(@Valid @RequestBody CreateUser request) {
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new IllegalArgumentException("Password exceeds BCrypt byte limit");
@@ -59,6 +63,7 @@ public class UserAdminController {
     @PutMapping("/{id}/roles")
     @PreAuthorize("hasAuthority('user:assign_role')")
     @Transactional
+    @Operation(summary = "Assign/Change user role")
     public UserView changeRoles(
             @PathVariable UUID id,
             @Valid @RequestBody ChangeRoles request,

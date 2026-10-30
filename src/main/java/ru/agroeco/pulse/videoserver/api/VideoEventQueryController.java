@@ -3,6 +3,7 @@ package ru.agroeco.pulse.videoserver.api;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -30,6 +31,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/videoserver/events")
 @RequiredArgsConstructor
+@Tag(name = "Video Servers", description = "Управление видеосерверами (VMS)")
 public class VideoEventQueryController {
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
