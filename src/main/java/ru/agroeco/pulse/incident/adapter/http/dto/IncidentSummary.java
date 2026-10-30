@@ -12,6 +12,7 @@ public record IncidentSummary(
         IncidentCreationMode creationMode,
         IncidentStatus status,
         IncidentSeverity severity,
+        IncidentKind kind,
         Instant eventTime,
         Instant createdAt,
         Instant updatedAt,

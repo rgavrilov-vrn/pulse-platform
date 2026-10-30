@@ -102,6 +102,10 @@ public class IncidentEntity {
     @Column(columnDefinition = "text")
     private String comment;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kind", length = 32)
+    private IncidentKind kind;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> metadata;

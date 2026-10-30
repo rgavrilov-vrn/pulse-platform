@@ -17,6 +17,8 @@ import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -33,6 +35,12 @@ public class IncidentService {
     private final StatusHistoryRepository statusHistory;
     private final StatusTransitionRepository transitions;
     private final EventDispatcher events;
+
+    // ↓ новые зависимости для чек-листов
+    private final IncidentChecklistItemRepository checklistLinks;
+    private final ChecklistItemRepository checklistItems;
+    private final ViolationCategoryRepository categories;
+    private final CategoryGroupRepository groups;
 
     // ------------------------------------------------------------------ CREATE
     @Transactional
@@ -206,21 +214,57 @@ public class IncidentService {
 
     // ---------------------------------------------------------------- MAPPERS
     private IncidentSummary toSummary(IncidentEntity i) {
-        return new IncidentSummary(i.getId(), i.getNumber(), i.getSource(),
-                i.getCreationMode(), i.getStatus(), i.getSeverity(),
-                i.getEventTime(), i.getCreatedAt(), i.getUpdatedAt(),
-                i.getAssignedTo(), i.getComment());
+        return new IncidentSummary(
+                i.getId(),
+                i.getNumber(),
+                i.getSource(),
+                i.getCreationMode(),
+                i.getStatus(),
+                i.getSeverity(),
+                i.getKind(),                    // ← NEW, после severity
+                i.getEventTime(),
+                i.getCreatedAt(),
+                i.getUpdatedAt(),
+                i.getAssignedTo(),
+                i.getComment()
+        );
     }
 
     private IncidentDetails toDetails(IncidentEntity i) {
-        return new IncidentDetails(i.getId(), i.getNumber(), i.getVersion(),
-                i.getSource(), i.getCreationMode(), i.getStatus(), i.getSeverity(),
-                i.getEventTime(), i.getReceivedAt(), i.getCreatedAt(), i.getUpdatedAt(),
-                i.getCreatedBy(), i.getUpdatedBy(), i.getOperatorId(), i.getAssignedTo(),
-                i.getDueAt(), i.getConfirmedAt(), i.getConfirmedBy(),
-                i.getClosedAt(), i.getClosedBy(), i.getResolutionComment(),
-                i.getCancelledAt(), i.getCancelledBy(), i.getCancellationReason(),
-                i.getComment(), i.getMetadata());
+        List<IncidentChecklistItemView> checkpoints =
+                checklistLinks.findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(i.getId())
+                        .stream().map(this::toCheckpointView).toList();
+
+        return new IncidentDetails(
+                i.getId(),
+                i.getNumber(),
+                i.getVersion(),
+                i.getSource(),
+                i.getCreationMode(),
+                i.getStatus(),
+                i.getSeverity(),
+                i.getKind(),                    // ← порядок как в record
+                checkpoints,                    // ← порядок как в record
+                i.getEventTime(),
+                i.getReceivedAt(),
+                i.getCreatedAt(),
+                i.getUpdatedAt(),
+                i.getCreatedBy(),
+                i.getUpdatedBy(),
+                i.getOperatorId(),
+                i.getAssignedTo(),
+                i.getDueAt(),
+                i.getConfirmedAt(),
+                i.getConfirmedBy(),
+                i.getClosedAt(),
+                i.getClosedBy(),
+                i.getResolutionComment(),
+                i.getCancelledAt(),
+                i.getCancelledBy(),
+                i.getCancellationReason(),
+                i.getComment(),
+                i.getMetadata()
+        );
     }
 
     private CommentView toCommentView(CommentEntity c) {
@@ -232,5 +276,175 @@ public class IncidentService {
         return new StatusHistoryView(h.getId(), h.getIncidentId(),
                 h.getFromStatus(), h.getToStatus(), h.getChangedBy(),
                 h.getChangedAt(), h.getComment(), h.getRequestId());
+    }
+
+    // -------------------------------------------------------------- UPDATE
+    @Transactional
+    public IncidentDetails update(UUID id, UpdateIncidentRequest req, UUID actorId) {
+        IncidentEntity incident = incidents.findById(id)
+                .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
+
+        if (incident.getStatus().isTerminal()) {
+            throw new BusinessRuleException(
+                    "Incident " + incident.getStatus() + " is terminal; update not allowed");
+        }
+
+        Map<String, Object> oldData = new HashMap<>();
+        if (incident.getKind() != null) oldData.put("kind", incident.getKind().name());
+        oldData.put("eventTime", incident.getEventTime().toString());
+        if (incident.getComment() != null) oldData.put("comment", incident.getComment());
+
+        if (req.kind() != null)      incident.setKind(req.kind());
+        if (req.eventTime() != null) incident.setEventTime(req.eventTime());
+        if (req.comment() != null)   incident.setComment(req.comment().isBlank() ? null : req.comment());
+
+        if (req.checkpoint() != null && !req.checkpoint().isBlank()) {
+            addCheckpointLink(incident, req.checkpoint(), actorId);
+        }
+
+        // Валидация согласованности kind ↔ существующие линки
+        if (!checklistLinks.findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(id).isEmpty()
+                && incident.getKind() == null) {
+            throw new BusinessRuleException(
+                    "Incident has checkpoints but kind is null");
+        }
+
+        incident.setUpdatedBy(actorId);
+        incidents.saveAndFlush(incident);
+
+        addComment(incident.getId(), new AddCommentRequest(CommentType.OPERATOR, req.comment()), actorId);
+
+        events.dispatch(IncidentUpdated.builder()
+                .incidentId(id)
+                .kind(incident.getKind())
+                .eventTime(incident.getEventTime())
+                .comment(incident.getComment())
+                .oldData(oldData)
+                .actorId(actorId)
+                .occurredAt(Instant.now())
+                .build());
+
+        return toDetails(incident);
+    }
+
+    // ------------------------------------------- CHECKPOINT (add)
+    @Transactional
+    public IncidentChecklistItemView addCheckpoint(
+            UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
+        IncidentEntity incident = incidents.findById(incidentId)
+                .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
+
+        if (incident.getStatus().isTerminal()) {
+            throw new BusinessRuleException(
+                    "Incident " + incident.getStatus() + " is terminal; cannot add checkpoints");
+        }
+
+        IncidentChecklistItemEntity link =
+                addCheckpointLink(incident, checklistItemCode, comment, actorId);
+        incidents.saveAndFlush(incident);   // сохранить kind, если авто-вывелся
+
+        events.dispatch(IncidentCheckpointAdded.builder()
+                .incidentId(incidentId)
+                .linkId(link.getId())
+                .checklistItemId(link.getChecklistItemId())
+                .checklistItemCode(checklistItemCode)
+                .kind(incident.getKind())
+                .actorId(actorId)
+                .occurredAt(Instant.now())
+                .build());
+
+        return toCheckpointView(link);
+    }
+
+    // ------------------------------------------- CHECKPOINT (list)
+    @Transactional(readOnly = true)
+    public List<IncidentChecklistItemView> listCheckpoints(UUID incidentId) {
+        if (!incidents.existsById(incidentId)) {
+            throw new NotFoundException("Incident not found: " + incidentId);
+        }
+        return checklistLinks
+                .findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(incidentId)
+                .stream().map(this::toCheckpointView).toList();
+    }
+
+    // ------------------------------------------- CHECKPOINT (remove, soft)
+    @Transactional
+    public void removeCheckpoint(UUID incidentId, UUID linkId, UUID actorId) {
+        IncidentChecklistItemEntity link = checklistLinks.findById(linkId)
+                .filter(l -> l.getIncidentId().equals(incidentId))
+                .filter(l -> !l.isDeleted())
+                .orElseThrow(() -> new NotFoundException("Checkpoint link not found: " + linkId));
+
+        link.setDeleted(true);
+        link.setDeletedAt(Instant.now());
+        link.setDeletedBy(actorId);
+        checklistLinks.saveAndFlush(link);
+
+        events.dispatch(IncidentCheckpointRemoved.builder()
+                .incidentId(incidentId)
+                .linkId(linkId)
+                .checklistItemId(link.getChecklistItemId())
+                .actorId(actorId)
+                .occurredAt(Instant.now())
+                .build());
+    }
+
+    // ------------------------------------------- helper
+    private IncidentChecklistItemEntity addCheckpointLink(
+            IncidentEntity incident, String code, UUID actorId) {
+        return addCheckpointLink(incident, code, null, actorId);
+    }
+
+    private IncidentChecklistItemEntity addCheckpointLink(
+            IncidentEntity incident, String code, String comment, UUID actorId) {
+
+        ChecklistItemEntity item = checklistItems.findByCode(code)
+                .orElseThrow(() -> new BusinessRuleException("Unknown checkpoint: " + code));
+
+        // Идемпотентность: если уже привязан — вернуть существующий
+        var existing = checklistLinks
+                .findByIncidentIdAndChecklistItemIdAndDeletedFalse(incident.getId(), item.getId());
+        if (existing.isPresent()) return existing.get();
+
+        ViolationCategoryEntity category = categories.findById(item.getCategoryId())
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Category missing for checkpoint " + code));
+        CategoryGroupEntity group = groups.findById(category.getGroupId())
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Group missing for category " + category.getCode()));
+
+        IncidentKind derivedKind = IncidentKind.fromGroupCode(group.getCode());
+
+/*
+        if (incident.getKind() != null && incident.getKind() != derivedKind) {
+            throw new BusinessRuleException(
+                    "Checkpoint '" + code + "' belongs to kind " + derivedKind
+                            + ", but incident kind is " + incident.getKind());
+        }
+ */
+        if (incident.getKind() == null) {
+            incident.setKind(derivedKind);
+        }
+
+        IncidentChecklistItemEntity link = IncidentChecklistItemEntity.builder()
+                .incidentId(incident.getId())
+                .checklistItemId(item.getId())
+                .itemNameSnapshot(item.getName())
+                .categoryNameSnapshot(category.getName())
+                .severity(item.getDefaultSeverity())
+                .comment(comment)
+                .createdBy(actorId)
+                .deleted(false)
+                .build();
+
+        return checklistLinks.save(link);
+    }
+
+    // ------------------------------------------- mappers
+    private IncidentChecklistItemView toCheckpointView(IncidentChecklistItemEntity l) {
+        return new IncidentChecklistItemView(
+                l.getId(), l.getIncidentId(), l.getChecklistItemId(),
+                l.getItemNameSnapshot(), l.getCategoryNameSnapshot(),
+                l.getSeverity(), l.getComment(), l.getCreatedBy(), l.getCreatedAt());
     }
 }

@@ -661,3 +661,83 @@ COMMIT;
 -- WHERE  g.is_active AND c.is_active AND i.is_active
 -- ORDER  BY g.sort_order, c.sort_order, i.sort_order;
 -- =============================================================================
+
+
+-- =============================================================================
+-- 012_refactor_incident_checklist_links.sql
+-- Переводит incident.incident_checklist_items к паттерну incident.comments:
+--   * id UUID PK
+--   * soft delete (is_deleted / deleted_at / deleted_by)
+--   * partial unique на активные (incident_id, checklist_item_id)
+-- Удаляет legacy incidents.checkpoint (из 011).
+--
+-- Идемпотентно: ADD COLUMN IF NOT EXISTS + guard на PK/индексы.
+-- Зависит от: 007 (схема), 011 (колонка checkpoint), 008/009 (справочники).
+-- =============================================================================
+
+BEGIN;
+
+-- -----------------------------------------------------------------------------
+-- 1. Убираем legacy-колонку (single checkpoint) — переехала в link-таблицу.
+-- -----------------------------------------------------------------------------
+ALTER TABLE incident.incidents
+DROP COLUMN IF EXISTS checkpoint;
+
+-- -----------------------------------------------------------------------------
+-- 2. Приводим incident_checklist_items к comment-паттерну.
+--    Шаги: id → backfill → soft-delete columns → PK(id) → partial unique.
+-- -----------------------------------------------------------------------------
+
+-- 2.1 id
+ALTER TABLE incident.incident_checklist_items
+    ADD COLUMN IF NOT EXISTS id UUID;
+
+UPDATE incident.incident_checklist_items
+SET id = gen_random_uuid()
+WHERE id IS NULL;
+
+ALTER TABLE incident.incident_checklist_items
+    ALTER COLUMN id SET NOT NULL,
+ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+-- 2.2 soft delete
+ALTER TABLE incident.incident_checklist_items
+    ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES auth.users(id);
+
+-- 2.3 PK: composite → id
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'incident_checklist_items_pkey'
+          AND conrelid = 'incident.incident_checklist_items'::regclass
+    ) THEN
+ALTER TABLE incident.incident_checklist_items
+DROP CONSTRAINT incident_checklist_items_pkey;
+END IF;
+END $$;
+
+ALTER TABLE incident.incident_checklist_items
+    ADD PRIMARY KEY (id);
+
+-- 2.4 partial unique: активный линк на (incident, checklist_item) — один
+CREATE UNIQUE INDEX IF NOT EXISTS ux_incident_checklist_items_active
+    ON incident.incident_checklist_items (incident_id, checklist_item_id)
+    WHERE NOT is_deleted;
+
+-- 2.5 индекс для листинга (аналог ix_comments_incident)
+CREATE INDEX IF NOT EXISTS ix_incident_checklist_items_incident
+    ON incident.incident_checklist_items (incident_id, created_at DESC)
+    WHERE NOT is_deleted;
+
+COMMENT ON COLUMN incident.incident_checklist_items.id              IS 'PK (UUID, паттерн comments)';
+COMMENT ON COLUMN incident.incident_checklist_items.is_deleted      IS 'Soft-delete флаг';
+COMMENT ON COLUMN incident.incident_checklist_items.deleted_at      IS 'Момент soft-delete';
+COMMENT ON COLUMN incident.incident_checklist_items.deleted_by      IS 'Кто удалил (soft)';
+COMMENT ON COLUMN incident.incident_checklist_items.item_name_snapshot     IS 'Имя пункта чек-листа на момент привязки';
+COMMENT ON COLUMN incident.incident_checklist_items.category_name_snapshot IS 'Имя категории на момент привязки';
+
+COMMIT;
+

@@ -143,6 +143,52 @@ public class IncidentController {
         return incidentService.addComment(id, req, principal.id());
     }
 
+    // -------------------------------------------------------------- UPDATE
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasAuthority('incident:write')")
+    @Operation(summary = "Partial update incident",
+            description = "Обновляет kind, eventTime, comment. Если передан checkpoint "
+                    + "(incident.checklist_items.code) — добавляет связь с пунктом чек-листа "
+                    + "идемпотентно, kind выводится из группы чек-листа при необходимости.")
+    public IncidentDetails update(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateIncidentRequest req,
+            @AuthenticationPrincipal AppPrincipal principal) {
+        return incidentService.update(id, req, principal.id());
+    }
+
+    // ------------------------------------------- LIST CHECKPOINTS
+    @GetMapping("/{id}/checkpoints")
+    @PreAuthorize("hasAuthority('incident:read')")
+    @Operation(summary = "List incident checkpoints (active links)")
+    public List<IncidentChecklistItemView> listCheckpoints(@PathVariable UUID id) {
+        return incidentService.listCheckpoints(id);
+    }
+
+    // ------------------------------------------- ADD CHECKPOINT
+    @PostMapping("/{id}/checkpoints")
+    @PreAuthorize("hasAuthority('incident:write')")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Attach checklist item to incident (idempotent)")
+    public IncidentChecklistItemView addCheckpoint(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddIncidentCheckpointRequest req,
+            @AuthenticationPrincipal AppPrincipal principal) {
+        return incidentService.addCheckpoint(id, req.checkpoint(), req.comment(), principal.id());
+    }
+
+    // ------------------------------------------- REMOVE CHECKPOINT (soft)
+    @DeleteMapping("/{id}/checkpoints/{linkId}")
+    @PreAuthorize("hasAuthority('incident:write')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Detach checklist item (soft delete)")
+    public void removeCheckpoint(
+            @PathVariable UUID id,
+            @PathVariable UUID linkId,
+            @AuthenticationPrincipal AppPrincipal principal) {
+        incidentService.removeCheckpoint(id, linkId, principal.id());
+    }
+
     // --------------------------------------------------------------- helpers
 
     private Specification<IncidentEntity> buildSpec(
