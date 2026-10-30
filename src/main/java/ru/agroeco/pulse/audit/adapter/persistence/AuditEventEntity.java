@@ -1,7 +1,17 @@
 package ru.agroeco.pulse.audit.adapter.persistence;
 
-import jakarta.persistence.*;
-import lombok.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -37,7 +47,13 @@ public class AuditEventEntity {
     @Column(name = "entity_table", nullable = false, length = 100)
     private String entityTable;
 
-    @Column(name = "entity_id", nullable = false)
+    /**
+     * Аудит-события без привязки к сущности легитимны:
+     * USER_AUTHENTICATION_FAILED, USER_LOGGED_OUT и т.п.
+     *
+     * В БД: audit.audit_log.entity_id DROP NOT NULL (миграция 009).
+     */
+    @Column(name = "entity_id")
     private UUID entityId;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -54,7 +70,8 @@ public class AuditEventEntity {
     @Column(name = "source_ip")
     private InetAddress sourceIp;
 
-    @Column(name = "user_agent")
+    /** UA может быть длиннее 255 — увеличили до 512. */
+    @Column(name = "user_agent", length = 512)
     private String userAgent;
 
     @PrePersist

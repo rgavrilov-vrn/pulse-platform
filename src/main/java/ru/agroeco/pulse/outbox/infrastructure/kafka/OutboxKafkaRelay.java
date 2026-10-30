@@ -17,15 +17,14 @@ import org.springframework.stereotype.Component;
  * Публикует накопленные outbox-события в Kafka.
  *
  * Архитектурно:
- *   claimBatch()  → короткая транзакция (FOR UPDATE SKIP LOCKED), возвращает DTO
- *   send()        → вне транзакции
- *   markSent/Fail → отдельная REQUIRES_NEW транзакция на каждое событие
+ *   claimBatch()    → короткая транзакция (FOR UPDATE SKIP LOCKED), возвращает DTO
+ *   send()          → вне транзакции
+ *   markPublished() → отдельная REQUIRES_NEW транзакция на каждое событие
  *
  * Семантика: at-least-once delivery. Между claimBatch-коммитом (лок снят)
- * и markSent() событие считается "висящим" — другой инстанс может его
+ * и markPublished() событие считается "висящим" — другой инстанс может его
  * повторно захватить и опубликовать дубль. Consumers обязаны дедуплицировать
- * по eventId (ProcessedEventPort). Это осознанный компромисс, чтобы не держать
- * DB-локи на время сетевого вызова Kafka.
+ * по eventId (ProcessedEventPort).
  */
 @Slf4j
 @Component
@@ -51,17 +50,27 @@ public class OutboxKafkaRelay {
 
     @Scheduled(fixedDelayString = "${app.outbox.relay-interval-ms:5000}")
     public void relayPendingEvents() {
-        List<ClaimedEvent> batch = state.claimBatch(
-                Instant.now(),
-                properties.getBatchSize()
-        );
+        List<ClaimedEvent> batch;
+        try {
+            batch = state.claimBatch(Instant.now(), properties.getBatchSize());
+        } catch (RuntimeException ex) {
+            // Ошибка claim — весь цикл пропускаем, следующий запуск подхватит.
+            log.error("Outbox claimBatch failed", ex);
+            return;
+        }
 
         for (ClaimedEvent event : batch) {
-            publishAndMark(event);
+            if (!publishAndMark(event)) {
+                // Interrupted — прерываем батч, следующие события заберёт следующий запуск.
+                break;
+            }
         }
     }
 
-    private void publishAndMark(ClaimedEvent event) {
+    /**
+     * @return false, если прерваны (interrupt) — сигнал прервать батч.
+     */
+    private boolean publishAndMark(ClaimedEvent event) {
         try {
             String topic = resolveTopic(event.eventType());
             String key = event.entityId() == null
@@ -72,19 +81,46 @@ public class OutboxKafkaRelay {
                     .send(topic, key, event.payload())
                     .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-            state.markSent(event.id());
+            safeMarkPublished(event.id());
+            return true;
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            state.markFailed(event.id(), "Interrupted");
+            safeMarkFailed(event.id(), "Interrupted");
+            return false;   // прерываем for-цикл — поток всё равно не может продолжать
+
         } catch (ExecutionException | TimeoutException e) {
             log.warn("Kafka send failed: eventId={}, error={}",
                     event.id(), e.getMessage());
-            state.markFailed(event.id(),
+            safeMarkFailed(event.id(),
                     e.getClass().getSimpleName() + ": " + e.getMessage());
+            return true;
+
         } catch (RuntimeException e) {
-            // Например, ошибка в state.markSent или неожиданный сбой в KafkaTemplate
             log.error("Unexpected error publishing outbox event {}", event.id(), e);
-            state.markFailed(event.id(), e.getClass().getSimpleName());
+            safeMarkFailed(event.id(), e.getClass().getSimpleName());
+            return true;
+        }
+    }
+
+    /**
+     * markPublished/markFailed сами по себе REQUIRES_NEW и внутри ловят
+     * "событие исчезло". Здесь дополнительный try/catch — на случай ошибки
+     * БД, чтобы не обрывать батч из-за одного сбоя.
+     */
+    private void safeMarkPublished(java.util.UUID id) {
+        try {
+            state.markPublished(id);
+        } catch (RuntimeException ex) {
+            log.error("markPublished failed for event {}", id, ex);
+        }
+    }
+
+    private void safeMarkFailed(java.util.UUID id, String error) {
+        try {
+            state.markFailed(id, error);
+        } catch (RuntimeException ex) {
+            log.error("markFailed failed for event {}", id, ex);
         }
     }
 

@@ -1,7 +1,6 @@
 package ru.agroeco.pulse.incidentorchestrator.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +11,8 @@ import ru.agroeco.pulse.incidentorchestrator.api.IncidentOrchestratorProperties;
 import ru.agroeco.pulse.notification.api.NotificationRequested;
 import ru.agroeco.pulse.outbox.api.OutboxMessage;
 import ru.agroeco.pulse.outbox.api.OutboxPort;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -70,7 +71,7 @@ public class RouteIncidentUseCase {
                 payload,
                 request.occurredAt()
             ));
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Failed to serialize NotificationRequested", exception);
         }
     }
@@ -78,7 +79,7 @@ public class RouteIncidentUseCase {
     private String buildPayload(IncidentCreated event) {
         try {
             return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Failed to serialize incident payload", exception);
         }
     }

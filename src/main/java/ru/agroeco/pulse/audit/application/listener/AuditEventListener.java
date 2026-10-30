@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.audit.application.listener;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -65,7 +65,7 @@ public class AuditEventListener {
         if (value instanceof String s) return s; // уже готовый JSON
         try {
             return mapper.writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Cannot serialize audit payload", ex);
         }
     }

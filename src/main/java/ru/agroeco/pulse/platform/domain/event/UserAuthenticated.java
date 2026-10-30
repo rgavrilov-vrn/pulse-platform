@@ -40,4 +40,12 @@ public record UserAuthenticated(
         // при логине SecurityContext может быть ещё не заполнен
         return userId;
     }
+
+    @Override
+    public boolean publishToOutbox() {
+        // Auth-события пишутся только в audit, в Kafka не уходят.
+        // Без этого флага OutboxListener пишет их в outbox_events,
+        // где для UserAuthenticationFailed entity_id NOT NULL → падение.
+        return false;
+    }
 }

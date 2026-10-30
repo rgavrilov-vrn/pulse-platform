@@ -1,6 +1,5 @@
 package ru.agroeco.pulse.incidentorchestrator.messaging;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -9,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.api.IncidentCreated;
 import ru.agroeco.pulse.incidentorchestrator.application.RouteIncidentUseCase;
 import ru.agroeco.pulse.outbox.api.ProcessedEventPort;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Component
@@ -31,7 +32,7 @@ public class IncidentCreatedConsumer {
         IncidentCreated event;
         try {
             event = objectMapper.readValue(payload, IncidentCreated.class);
-        } catch (Exception exception) {
+        } catch (JacksonException exception) {
             log.error("Failed to deserialize IncidentCreated: {}", payload, exception);
             return;
         }

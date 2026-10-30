@@ -1,6 +1,5 @@
 package ru.agroeco.pulse.incident.messaging;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -9,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.application.CreateIncidentFromVideoEventUseCase;
 import ru.agroeco.pulse.outbox.api.ProcessedEventPort;
 import ru.agroeco.pulse.videoserver.api.VideoEventNormalized;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Component
@@ -31,7 +32,7 @@ public class VideoEventNormalizedConsumer {
         VideoEventNormalized event;
         try {
             event = objectMapper.readValue(payload, VideoEventNormalized.class);
-        } catch (Exception exception) {
+        } catch (JacksonException exception) {
             log.error("Failed to deserialize VideoEventNormalized: {}", payload, exception);
             return;
         }

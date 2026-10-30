@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.videoserver.api.validation;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,7 @@ public class JsonValidator implements ConstraintValidator<ValidJson, String> {
         try {
             mapper.readTree(value);
             return true;
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return false;
         }
     }

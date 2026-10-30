@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,8 +18,15 @@ import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
  * Отдельный бин — чтобы Spring AOP-прокси реально применял @Transactional
  * (self-invocation внутри OutboxKafkaRelay не сработал бы).
  */
+@Slf4j
 @Component
 public class OutboxStateUpdater {
+
+    /**
+     * Потолок экспоненциального backoff — 1 час.
+     * Без него при maxAttempts > 20 получаем интервалы в годах.
+     */
+    private static final long MAX_BACKOFF_SECONDS = 3600L;
 
     private final OutboxEventRepository repository;
     private final OutboxKafkaProperties properties;
@@ -44,32 +52,35 @@ public class OutboxStateUpdater {
                 .toList();
     }
 
+    /**
+     * Идемпотентный no-op, если событие исчезло.
+     * Раньше orElseThrow(IllegalStateException) обрывал весь батч в relay.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markSent(UUID id) {
-        OutboxEventEntity event = repository.findById(id)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Outbox event disappeared: " + id));
-        event.setStatus(OutboxStatus.SENT);
-        event.setPublishedAt(Instant.now());
-        event.setLastError(null);
-        // managed — flush произойдёт на коммите транзакции
+    public void markPublished(UUID id) {
+        repository.findById(id).ifPresentOrElse(event -> {
+            event.setStatus(OutboxStatus.PUBLISHED);
+            event.setPublishedAt(Instant.now());
+            event.setLastError(null);
+            // managed — flush на коммите транзакции
+        }, () -> log.warn("Outbox event {} not found on markPublished — skipping", id));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(UUID id, String error) {
-        OutboxEventEntity event = repository.findById(id)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Outbox event disappeared: " + id));
+        repository.findById(id).ifPresentOrElse(event -> {
+            int attempts = event.getAttempts() + 1;
+            event.setAttempts(attempts);
+            event.setLastError(error);
 
-        int attempts = event.getAttempts() + 1;
-        event.setAttempts(attempts);
-        event.setLastError(error);
-
-        if (attempts >= properties.getMaxAttempts()) {
-            event.setStatus(OutboxStatus.FAILED);
-        } else {
-            long backoffSeconds = (long) Math.pow(2, attempts);
-            event.setNextAttemptAt(Instant.now().plusSeconds(backoffSeconds));
-        }
+            if (attempts >= properties.getMaxAttempts()) {
+                event.setStatus(OutboxStatus.DEAD);
+            } else {
+                long backoffSeconds = Math.min(
+                        MAX_BACKOFF_SECONDS,
+                        (long) Math.pow(2, attempts));
+                event.setNextAttemptAt(Instant.now().plusSeconds(backoffSeconds));
+            }
+        }, () -> log.warn("Outbox event {} not found on markFailed — skipping", id));
     }
 }

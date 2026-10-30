@@ -54,3 +54,36 @@ COMMENT ON TABLE  outbox.processed_events IS 'Дедупликация у пот
 COMMENT ON COLUMN outbox.processed_events.consumer_name IS 'Имя потребителя (consumer)';
 COMMENT ON COLUMN outbox.processed_events.event_id      IS 'Идентификатор обработанного события';
 COMMENT ON COLUMN outbox.processed_events.processed_at  IS 'Момент обработки';
+
+
+-- 009_fix_audit_outbox.sql
+-- -------------------------------------------------------------
+-- Фикс для auth-событий без привязки к сущности:
+--   USER_AUTHENTICATION_FAILED, USER_LOGGED_OUT — entity_id = null.
+-- Плюс синхронизация CHECK статуса outbox с Java-enum {NEW, PUBLISHED, FAILED, DEAD}.
+--
+-- Файл должен идти после 005_create_schema_outbox.sql и 004_create_schema_audit.sql.
+-- -------------------------------------------------------------
+
+-- 1. audit.audit_log.entity_id → nullable
+ALTER TABLE audit.audit_log
+    ALTER COLUMN entity_id DROP NOT NULL;
+
+-- 2. outbox.outbox_events.entity_id → nullable
+ALTER TABLE outbox.outbox_events
+    ALTER COLUMN entity_id DROP NOT NULL;
+
+-- 3. CHECK статусов outbox — уже совпадает с 005 (NEW/PUBLISHED/FAILED/DEAD),
+--    но переопределяем на случай, если в чьём-то окружении 005 была с SENT.
+ALTER TABLE outbox.outbox_events
+DROP CONSTRAINT IF EXISTS chk_outbox_events_status;
+
+ALTER TABLE outbox.outbox_events
+    ADD CONSTRAINT chk_outbox_events_status
+        CHECK (status IN ('NEW', 'PUBLISHED', 'FAILED', 'DEAD'));
+
+-- 4. Индекс под частые запросы аудита (был отмечен как P1).
+CREATE INDEX IF NOT EXISTS ix_audit_log_actor
+    ON audit.audit_log (actor_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS ix_audit_log_action
+    ON audit.audit_log (action, occurred_at DESC);

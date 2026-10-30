@@ -6,8 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +16,8 @@ import ru.agroeco.pulse.goodwan.raw.RawDataHistoryEntity;
 import ru.agroeco.pulse.goodwan.raw.RawDataHistoryItem;
 import ru.agroeco.pulse.goodwan.raw.RawDataHistoryMapper;
 import ru.agroeco.pulse.goodwan.raw.RawDataHistoryRepository;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class GoodWanDataHistoryIngestionService {
@@ -121,7 +121,7 @@ public class GoodWanDataHistoryIngestionService {
 
         try {
             return objectMapper.writeValueAsString(parameters);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new GoodWanRawMappingException(
                 "Cannot serialize GoodWAN request parameters",
                 e

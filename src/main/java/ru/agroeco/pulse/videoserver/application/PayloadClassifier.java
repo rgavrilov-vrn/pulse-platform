@@ -1,8 +1,8 @@
 package ru.agroeco.pulse.videoserver.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
@@ -18,10 +18,10 @@ public class PayloadClassifier {
     public Classification classify(String rawPayload) {
         try {
             JsonNode node = mapper.readTree(rawPayload);
-            VideoEventType type = mapType(node.path("type").asText(""));
-            EventSeverity severity = mapSeverity(node.path("severity").asText(""));
+            VideoEventType type = mapType(node.path("type").asString(""));
+            EventSeverity severity = mapSeverity(node.path("severity").asString(""));
             return new Classification(type, severity);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             // защита: до этого места валидация @ValidJson не должна была пропустить
             throw new BusinessRuleException("INVALID_RAW_PAYLOAD: " + ex.getOriginalMessage());
         }

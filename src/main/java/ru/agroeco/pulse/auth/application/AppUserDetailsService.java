@@ -20,7 +20,7 @@ public class AppUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) {
-        UserEntity user = userRepository.findByLoginIgnoreCase(username)
+        UserEntity user = userRepository.findByLogin(username)
                 .filter(UserEntity::isActive)
                 .orElseThrow(() -> new UsernameNotFoundException("User not available"));
 

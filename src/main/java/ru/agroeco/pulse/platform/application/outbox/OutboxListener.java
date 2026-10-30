@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.platform.application.outbox;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -38,7 +38,7 @@ public class OutboxListener {
     private String serialize(DomainEvent event) {
         try {
             return mapper.writeValueAsString(event);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Cannot serialize outbox event", ex);
         }
     }

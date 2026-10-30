@@ -9,10 +9,24 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
-    /** Для аутентификации: сразу тянем роли (без cartesian product). */
-    @EntityGraph(attributePaths = {"roles", "roles.role"})
-    Optional<UserEntity> findByLoginIgnoreCase(String login);
+    /**
+     * Для аутентификации и JWT-фильтра.
+     *
+     * login — CITEXT: сравнение регистронезависимое на уровне типа,
+     * запрос использует btree-индекс auth.users.login. Вариант
+     * findByLoginIgnoreCase генерировал LOWER(login) и full-scan'ил.
+     *
+     * EntityGraph тянет всю цепочку user → roles → role → role_permissions
+     * → permission за один проход, чтобы AppPrincipalMapper не делал N+1
+     * на каждый аутентифицированный HTTP-запрос.
+     */
+    @EntityGraph(attributePaths = {
+            "roles",
+            "roles.role",
+            "roles.role.permissions",
+            "roles.role.permissions.permission"
+    })
+    Optional<UserEntity> findByLogin(String login);
 
-    /** Для админских операций — без eager-загрузки, чтобы не дублировать. */
-    boolean existsByLoginIgnoreCase(String login);
+    boolean existsByLogin(String login);
 }

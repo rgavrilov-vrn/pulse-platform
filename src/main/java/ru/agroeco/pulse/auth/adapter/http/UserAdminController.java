@@ -44,7 +44,7 @@ public class UserAdminController {
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new IllegalArgumentException("Password exceeds BCrypt byte limit");
         }
-        if (users.existsByLoginIgnoreCase(request.username())) {
+        if (users.existsByLogin(request.username())) {
             throw new IllegalArgumentException("User already exists");
         }
 

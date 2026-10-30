@@ -37,7 +37,7 @@ public class SecurityBootstrap implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         validateInput();
 
-        if (users.findByLoginIgnoreCase(username).isPresent()) {
+        if (users.findByLogin(username).isPresent()) {
             log.info("Bootstrap: user '{}' already exists — skipping", username);
             return;
         }
