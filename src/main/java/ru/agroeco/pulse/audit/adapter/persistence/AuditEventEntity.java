@@ -5,7 +5,6 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.type.SqlTypes;
-import ru.agroeco.pulse.audit.domain.AuditEventId;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -13,21 +12,13 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "audit_log", schema = "audit")
-@IdClass(AuditEventId.class)
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AuditEventEntity {
 
-    /**
-     * Composite PK (id, occurred_at) — обязательное условие для
-     * партиционированной таблицы в Postgres (partition key должен быть в PK).
-     *
-     * UUID генерится на клиенте: BIGSERIAL/IDENTITY несовместим с composite PK.
-     */
     @Id
     @UuidGenerator
     private UUID id;
 
-    @Id
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private Instant occurredAt;
 
@@ -58,7 +49,12 @@ public class AuditEventEntity {
     @Column(name = "request_id", length = 100)
     private String requestId;
 
-    @Column(name = "source_ip")
+    /**
+     * String, а не InetAddress: Hibernate 6 без кастомного UserType не умеет
+     * биндить InetAddress в Postgres INET. Строка + columnDefinition="inet"
+     * даёт implicit cast varchar→inet на стороне Postgres.
+     */
+    @Column(name = "source_ip", columnDefinition = "inet")
     private InetAddress sourceIp;
 
     @Column(name = "user_agent", length = 512)
