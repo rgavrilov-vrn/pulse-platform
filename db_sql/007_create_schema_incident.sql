@@ -401,6 +401,37 @@ FROM (VALUES
      ) AS seed(category_code, code, name, description, comment_template, default_severity, sort_order)
          JOIN incident.violation_categories c ON c.code = seed.category_code;
 
+BEGIN;
+
+INSERT INTO incident.status_transitions
+(from_status, to_status)
+VALUES
+    ('DRAFT', 'RECORDED'),
+    ('DRAFT', 'CANCELLED'),
+
+    ('RECORDED', 'NEEDS_REVIEW'),
+    ('RECORDED', 'CONFIRMED'),
+    ('RECORDED', 'REJECTED'),
+    ('RECORDED', 'CANCELLED'),
+
+    ('NEEDS_REVIEW', 'CONFIRMED'),
+    ('NEEDS_REVIEW', 'REJECTED'),
+    ('NEEDS_REVIEW', 'CANCELLED'),
+
+    ('CONFIRMED', 'CLOSED'),
+    ('CONFIRMED', 'CANCELLED'),
+
+    ('REJECTED', 'DRAFT'),
+    ('REJECTED', 'CANCELLED'),
+
+    ('CLOSED', 'ARCHIVED'),
+    ('CANCELLED', 'ARCHIVED')
+
+    ON CONFLICT DO NOTHING;
+
+
+COMMIT;
+
 -- 10. Комментарии к итоговой модели
 COMMENT ON SCHEMA incident IS 'Инциденты: доменно-нейтральная сущность и собственные справочники.';
 COMMENT ON TABLE incident.sources IS 'Источники инцидентов.';
