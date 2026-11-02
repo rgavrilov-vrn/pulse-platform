@@ -195,13 +195,20 @@ public class IncidentMaterialService {
         Path path = root.resolve(key);
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw error(HttpStatus.NOT_FOUND, "Stored file is unavailable");
         var channel = Files.newByteChannel(path, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
-        MaterialView material = (MaterialView) row[0];
-        events.dispatch(IncidentMaterialDownloaded.builder()
-                .incidentId(incidentId)
-                .materialId(materialId)
-                .fileName(material.fileName())
-                .occurredAt(Instant.now())
-                .build());
-        return new Download(material, new InputStreamResource(Channels.newInputStream(channel)));
+        try {
+            MaterialView material = (MaterialView) row[0];
+            transactions.executeWithoutResult(transaction ->
+                    events.dispatch(IncidentMaterialDownloaded.builder()
+                            .incidentId(incidentId)
+                            .materialId(materialId)
+                            .fileName(material.fileName())
+                            .occurredAt(Instant.now())
+                            .build()));
+            return new Download(material, new InputStreamResource(Channels.newInputStream(channel)));
+        } catch (RuntimeException | Error exception) {
+            try { channel.close(); }
+            catch (IOException closeException) { exception.addSuppressed(closeException); }
+            throw exception;
+        }
     }
 }
