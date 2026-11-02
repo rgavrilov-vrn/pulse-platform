@@ -54,7 +54,7 @@ public class IncidentCatalogService {
     }
 
     private ChecklistItemView toChecklistItemView(ChecklistItemEntity i) {
-        return new ChecklistItemView(i.getId(), i.getCategoryId(),
+        return new ChecklistItemView(i.getId(), i.getCategoryId(), i.getCode(),
                 i.getName(), i.getCommentTemplate());
     }
 }

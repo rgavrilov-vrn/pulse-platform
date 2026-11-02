@@ -9,6 +9,7 @@ import java.util.UUID;
 public record ChecklistItemView(
         UUID id,
         UUID categoryId,
+         String code,
         String name,
         String commentTemplate
 ) {}
