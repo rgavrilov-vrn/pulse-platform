@@ -6,11 +6,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.adapter.persistence.IncidentContextRefRepository;
 import ru.agroeco.pulse.incident.adapter.persistence.IncidentRepository;
+import ru.agroeco.pulse.incident.adapter.persistence.ViolationCategoryRepository;
 import ru.agroeco.pulse.incident.domain.IncidentContextRef;
 import ru.agroeco.pulse.incident.domain.IncidentCreationMode;
 import ru.agroeco.pulse.incident.domain.IncidentEntity;
 import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 import ru.agroeco.pulse.incident.domain.IncidentStatus;
+import ru.agroeco.pulse.incident.domain.ViolationCategoryEntity;
 import ru.agroeco.pulse.incident.domain.event.IncidentCreated;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.videoserver.api.EventSeverity;
@@ -30,11 +32,14 @@ public class CreateIncidentFromVideoEventUseCase {
     public static final String DOMAIN_VIDEOSERVER = "videoserver";
     public static final String DOMAIN_REF = "ref";
 
+    public static final String DEFAULT_CATEGORY_CODE = "EVENT_GENERAL";
+
     public static final UUID SYSTEM_USER_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final IncidentRepository incidentRepository;
     private final IncidentContextRefRepository contextRefRepository;
+    private final ViolationCategoryRepository categories;
     private final EventDispatcher events;
 
     @Transactional
@@ -43,6 +48,9 @@ public class CreateIncidentFromVideoEventUseCase {
         Instant now = Instant.now();
 
         IncidentSeverity severity = mapSeverity(event.severity());
+        ViolationCategoryEntity category = categories.findByCodeAndActiveTrue(DEFAULT_CATEGORY_CODE)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Active category '" + DEFAULT_CATEGORY_CODE + "' is not configured"));
 
         IncidentEntity incident = IncidentEntity.builder()
                 .id(incidentId)
@@ -50,6 +58,7 @@ public class CreateIncidentFromVideoEventUseCase {
                 .creationMode(IncidentCreationMode.INTEGRATION)
                 .status(IncidentStatus.RECORDED)
                 .severity(severity)
+                .categoryId(category.getId())
                 .eventTime(event.occurredAt())
                 .receivedAt(now)
                 .createdBy(SYSTEM_USER_ID)
@@ -83,8 +92,8 @@ public class CreateIncidentFromVideoEventUseCase {
 
         events.dispatch(created);
 
-        log.info("Incident created from video event: incidentId={}, number={}, severity={}",
-                incidentId, incident.getNumber(), severity);
+        log.info("Incident created from video event: incidentId={}, number={}, severity={}, categoryId={}",
+                incidentId, incident.getNumber(), severity, category.getId());
         return created;
     }
 

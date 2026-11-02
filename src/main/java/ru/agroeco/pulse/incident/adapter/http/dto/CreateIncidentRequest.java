@@ -8,6 +8,7 @@ import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Schema(name = "CreateIncidentRequest")
 public record CreateIncidentRequest(
@@ -19,6 +20,11 @@ public record CreateIncidentRequest(
         @NotNull
         @Schema(description = "Способ создания", example = "MANUAL", requiredMode = Schema.RequiredMode.REQUIRED)
         IncidentCreationMode creationMode,
+
+        @NotNull
+        @Schema(description = "Идентификатор категории инцидента (incident.violation_categories.id)",
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        UUID categoryId,
 
         @NotNull
         @Schema(description = "Момент события (ISO-8601)", example = "2026-02-11T10:15:30Z",

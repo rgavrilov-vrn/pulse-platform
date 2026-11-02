@@ -46,6 +46,9 @@ public class IncidentEntity {
     @Column(name = "severity", nullable = false, length = 32)
     private IncidentSeverity severity;
 
+    @Column(name = "category_id", nullable = false)
+    private UUID categoryId;
+
     @Column(name = "event_time", nullable = false)
     private Instant eventTime;
 
@@ -101,10 +104,6 @@ public class IncidentEntity {
 
     @Column(columnDefinition = "text")
     private String comment;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "kind", length = 32)
-    private IncidentKind kind;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb")

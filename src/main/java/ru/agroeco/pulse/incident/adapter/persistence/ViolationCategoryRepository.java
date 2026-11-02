@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import ru.agroeco.pulse.incident.domain.ViolationCategoryEntity;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ViolationCategoryRepository
@@ -21,4 +22,6 @@ public interface ViolationCategoryRepository
 
     List<ViolationCategoryEntity>
     findAllByActiveTrueAndGroupIdOrderBySortOrderAscCodeAsc(UUID groupId);
+
+    java.util.Optional<ViolationCategoryEntity> findByCodeAndActiveTrue(String code);
 }

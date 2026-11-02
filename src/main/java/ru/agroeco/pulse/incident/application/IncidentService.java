@@ -36,7 +36,6 @@ public class IncidentService {
     private final StatusTransitionRepository transitions;
     private final EventDispatcher events;
 
-    // ↓ новые зависимости для чек-листов
     private final IncidentChecklistItemRepository checklistLinks;
     private final ChecklistItemRepository checklistItems;
     private final ViolationCategoryRepository categories;
@@ -53,12 +52,18 @@ public class IncidentService {
                 .orElseThrow(() -> new BusinessRuleException(
                         "Source '" + sourceCode + "' does not exist or is inactive"));
 
+        ViolationCategoryEntity category = categories.findById(req.categoryId())
+                .filter(ViolationCategoryEntity::isActive)
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Category '" + req.categoryId() + "' does not exist or is inactive"));
+
         Instant now = Instant.now();
         IncidentEntity incident = IncidentEntity.builder()
                 .source(source.getCode())
                 .creationMode(req.creationMode())
                 .status(IncidentStatus.DRAFT)
                 .severity(req.severity() != null ? req.severity() : IncidentSeverity.MEDIUM)
+                .categoryId(category.getId())
                 .eventTime(req.eventTime())
                 .receivedAt(now)
                 .createdBy(actorId)
@@ -68,8 +73,8 @@ public class IncidentService {
                 .build();
 
         incidents.saveAndFlush(incident);
-        log.info("Incident created: id={}, number={}, source={}",
-                incident.getId(), incident.getNumber(), sourceCode);
+        log.info("Incident created: id={}, number={}, source={}, categoryId={}",
+                incident.getId(), incident.getNumber(), sourceCode, category.getId());
 
         events.dispatch(IncidentCreated.builder()
                 .incidentId(incident.getId())
@@ -159,7 +164,7 @@ public class IncidentService {
                 incident.setCancelledBy(actorId);
                 incident.setCancellationReason(req.comment());
             }
-            default -> { /* остальные переходы без side-effects */ }
+            default -> { }
         }
 
         incidents.saveAndFlush(incident);
@@ -213,6 +218,14 @@ public class IncidentService {
     }
 
     // ---------------------------------------------------------------- MAPPERS
+    private IncidentKind deriveKind(IncidentEntity incident) {
+        if (incident.getCategoryId() == null) return null;
+        return categories.findById(incident.getCategoryId())
+                .flatMap(category -> groups.findById(category.getGroupId()))
+                .map(group -> IncidentKind.fromGroupCode(group.getCode()))
+                .orElse(null);
+    }
+
     private IncidentSummary toSummary(IncidentEntity i) {
         return new IncidentSummary(
                 i.getId(),
@@ -221,7 +234,7 @@ public class IncidentService {
                 i.getCreationMode(),
                 i.getStatus(),
                 i.getSeverity(),
-                i.getKind(),                    // ← NEW, после severity
+                deriveKind(i),
                 i.getEventTime(),
                 i.getCreatedAt(),
                 i.getUpdatedAt(),
@@ -243,8 +256,8 @@ public class IncidentService {
                 i.getCreationMode(),
                 i.getStatus(),
                 i.getSeverity(),
-                i.getKind(),                    // ← порядок как в record
-                checkpoints,                    // ← порядок как в record
+                deriveKind(i),
+                checkpoints,
                 i.getEventTime(),
                 i.getReceivedAt(),
                 i.getCreatedAt(),
@@ -290,23 +303,18 @@ public class IncidentService {
         }
 
         Map<String, Object> oldData = new HashMap<>();
-        if (incident.getKind() != null) oldData.put("kind", incident.getKind().name());
+        oldData.put("categoryId", incident.getCategoryId().toString());
         oldData.put("eventTime", incident.getEventTime().toString());
         if (incident.getComment() != null) oldData.put("comment", incident.getComment());
 
-        if (req.kind() != null)      incident.setKind(req.kind());
+        if (req.categoryId() != null && !req.categoryId().equals(incident.getCategoryId())) {
+            changeCategory(incident, req.categoryId());
+        }
         if (req.eventTime() != null) incident.setEventTime(req.eventTime());
         if (req.comment() != null)   incident.setComment(req.comment().isBlank() ? null : req.comment());
 
         if (req.checkpoint() != null && !req.checkpoint().isBlank()) {
             addCheckpointLink(incident, req.checkpoint(), actorId);
-        }
-
-        // Валидация согласованности kind ↔ существующие линки
-        if (!checklistLinks.findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(id).isEmpty()
-                && incident.getKind() == null) {
-            throw new BusinessRuleException(
-                    "Incident has checkpoints but kind is null");
         }
 
         incident.setUpdatedBy(actorId);
@@ -316,7 +324,7 @@ public class IncidentService {
 
         events.dispatch(IncidentUpdated.builder()
                 .incidentId(id)
-                .kind(incident.getKind())
+                .kind(deriveKind(incident))
                 .eventTime(incident.getEventTime())
                 .comment(incident.getComment())
                 .oldData(oldData)
@@ -325,6 +333,27 @@ public class IncidentService {
                 .build());
 
         return toDetails(incident);
+    }
+
+    private void changeCategory(IncidentEntity incident, UUID newCategoryId) {
+        ViolationCategoryEntity category = categories.findById(newCategoryId)
+                .filter(ViolationCategoryEntity::isActive)
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Category '" + newCategoryId + "' does not exist or is inactive"));
+
+        boolean hasForeignCheckpoints = checklistLinks
+                .findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(incident.getId())
+                .stream()
+                .anyMatch(link -> checklistItems.findById(link.getChecklistItemId())
+                        .map(item -> !category.getId().equals(item.getCategoryId()))
+                        .orElse(true));
+
+        if (hasForeignCheckpoints) {
+            throw new BusinessRuleException(
+                    "Cannot change category: incident has checkpoints from another category");
+        }
+
+        incident.setCategoryId(category.getId());
     }
 
     // ------------------------------------------- CHECKPOINT (add)
@@ -341,14 +370,14 @@ public class IncidentService {
 
         IncidentChecklistItemEntity link =
                 addCheckpointLink(incident, checklistItemCode, comment, actorId);
-        incidents.saveAndFlush(incident);   // сохранить kind, если авто-вывелся
+        incidents.saveAndFlush(incident);
 
         events.dispatch(IncidentCheckpointAdded.builder()
                 .incidentId(incidentId)
                 .linkId(link.getId())
                 .checklistItemId(link.getChecklistItemId())
                 .checklistItemCode(checklistItemCode)
-                .kind(incident.getKind())
+                .kind(deriveKind(incident))
                 .actorId(actorId)
                 .occurredAt(Instant.now())
                 .build());
@@ -401,7 +430,11 @@ public class IncidentService {
         ChecklistItemEntity item = checklistItems.findByCode(code)
                 .orElseThrow(() -> new BusinessRuleException("Unknown checkpoint: " + code));
 
-        // Идемпотентность: если уже привязан — вернуть существующий
+        if (!item.getCategoryId().equals(incident.getCategoryId())) {
+            throw new BusinessRuleException(
+                    "Checkpoint '" + code + "' does not belong to the incident category");
+        }
+
         var existing = checklistLinks
                 .findByIncidentIdAndChecklistItemIdAndDeletedFalse(incident.getId(), item.getId());
         if (existing.isPresent()) return existing.get();
@@ -409,22 +442,6 @@ public class IncidentService {
         ViolationCategoryEntity category = categories.findById(item.getCategoryId())
                 .orElseThrow(() -> new BusinessRuleException(
                         "Category missing for checkpoint " + code));
-        CategoryGroupEntity group = groups.findById(category.getGroupId())
-                .orElseThrow(() -> new BusinessRuleException(
-                        "Group missing for category " + category.getCode()));
-
-        IncidentKind derivedKind = IncidentKind.fromGroupCode(group.getCode());
-
-/*
-        if (incident.getKind() != null && incident.getKind() != derivedKind) {
-            throw new BusinessRuleException(
-                    "Checkpoint '" + code + "' belongs to kind " + derivedKind
-                            + ", but incident kind is " + incident.getKind());
-        }
- */
-        if (incident.getKind() == null) {
-            incident.setKind(derivedKind);
-        }
 
         IncidentChecklistItemEntity link = IncidentChecklistItemEntity.builder()
                 .incidentId(incident.getId())
