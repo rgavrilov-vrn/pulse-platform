@@ -15,6 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.agroeco.pulse.incident.domain.event.IncidentMaterialDownloaded;
+import ru.agroeco.pulse.incident.domain.event.IncidentMaterialUploaded;
+import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -49,11 +52,14 @@ public class IncidentMaterialService {
     private final TransactionTemplate transactions;
     private final Path root;
     private final long maxBytes;
+    private final EventDispatcher events;
 
     public IncidentMaterialService(JdbcTemplate jdbc, PlatformTransactionManager manager,
+            EventDispatcher events,
             @Value("${app.storage.local.root-directory:${INCIDENT_FILES_DIRECTORY:./data/incident-files}}") String directory,
             @Value("${app.storage.max-file-size:50MB}") String maximum) throws IOException {
         this.jdbc = jdbc;
+        this.events = events;
         this.transactions = new TransactionTemplate(manager);
         this.transactions.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.maxBytes = DataSize.parse(maximum).toBytes();
@@ -153,6 +159,15 @@ public class IncidentMaterialService {
                 jdbc.update("INSERT INTO incident.media_assets (id,storage_provider,storage_key,file_name,mime_type,file_extension,size_bytes,sha256,material_type,uploaded_at,uploaded_by) VALUES (?,'LOCAL',?,?,?,?,?,?,?, ?,?)",
                         assetId, key, finalName, mime, extension, bytes, sha, kind, java.sql.Timestamp.from(uploadedAt), actorId);
                 jdbc.update("INSERT INTO incident.incident_materials (incident_id,media_asset_id,role,created_by) VALUES (?,?,'ADDITIONAL_EVIDENCE',?)", incidentId, assetId, actorId);
+                events.dispatch(IncidentMaterialUploaded.builder()
+                        .incidentId(incidentId)
+                        .materialId(assetId)
+                        .fileName(finalName)
+                        .mimeType(mime)
+                        .sizeBytes(bytes)
+                        .actorId(actorId)
+                        .occurredAt(uploadedAt)
+                        .build());
                 log.info("Material attached: incidentId={}, materialId={}, actorId={}, bytes={}, sha256={}", incidentId, assetId, actorId, bytes, sha);
                 return new MaterialView(assetId, finalName, mime, bytes, kind, "ADDITIONAL_EVIDENCE", uploadedAt,
                         "/api/v1/incidents/" + incidentId + "/materials/" + assetId + "/download");
@@ -180,6 +195,13 @@ public class IncidentMaterialService {
         Path path = root.resolve(key);
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw error(HttpStatus.NOT_FOUND, "Stored file is unavailable");
         var channel = Files.newByteChannel(path, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
-        return new Download((MaterialView) row[0], new InputStreamResource(Channels.newInputStream(channel)));
+        MaterialView material = (MaterialView) row[0];
+        events.dispatch(IncidentMaterialDownloaded.builder()
+                .incidentId(incidentId)
+                .materialId(materialId)
+                .fileName(material.fileName())
+                .occurredAt(Instant.now())
+                .build());
+        return new Download(material, new InputStreamResource(Channels.newInputStream(channel)));
     }
 }
