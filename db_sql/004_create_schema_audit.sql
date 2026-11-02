@@ -1,25 +1,21 @@
 -- 004_create_schema_audit.sql
--- Аудит действий: append-only журнал. Зависит от auth.users (003).
---
--- Партиционирование удалено. Composite PK (id, occurred_at) больше не нужен,
--- id — единственный PK. Для ранее партиционированных БД нужен миграционный
--- скрипт (см. заметку в конце файла) или reset в dev.
+-- Аудит действий: append-only журнал. Зависит от auth.users (003_0).
 
 CREATE SCHEMA IF NOT EXISTS audit;
 
 CREATE TABLE audit.audit_log (
-    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    occurred_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    actor_id      UUID         REFERENCES auth.users(id),
-    action        VARCHAR(100) NOT NULL,
-    entity_schema VARCHAR(100) NOT NULL,
-    entity_table  VARCHAR(100) NOT NULL,
-    entity_id     UUID,
-    old_data      JSONB,
-    new_data      JSONB,
-    request_id    VARCHAR(100),
-    source_ip     INET,
-    user_agent    TEXT
+                                 id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                                 occurred_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+                                 actor_id      UUID         REFERENCES auth.users(id),
+                                 action        VARCHAR(100) NOT NULL,
+                                 entity_schema VARCHAR(100) NOT NULL,
+                                 entity_table  VARCHAR(100) NOT NULL,
+                                 entity_id     UUID,
+                                 old_data      JSONB,
+                                 new_data      JSONB,
+                                 request_id    VARCHAR(100),
+                                 source_ip     INET,
+                                 user_agent    TEXT
 );
 
 CREATE INDEX ix_audit_log_occurred_at
@@ -31,9 +27,6 @@ CREATE INDEX ix_audit_log_actor
 CREATE INDEX ix_audit_log_action
     ON audit.audit_log (action, occurred_at DESC);
 
--- -----------------------------------------------------------------------------
--- Комментарии
--- -----------------------------------------------------------------------------
 COMMENT ON SCHEMA audit IS
     'Аудит действий: append-only журнал изменений сущностей.';
 COMMENT ON TABLE  audit.audit_log IS

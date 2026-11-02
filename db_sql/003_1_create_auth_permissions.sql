@@ -13,15 +13,16 @@
 -- (использовалась в ранней версии) — исключения делаются через роли.
 --
 -- Зависит от:
---   002_init_schemas.sql        (pgcrypto: crypt / gen_salt)
---   003_create_schema_auth.sql  (auth.users / roles / user_roles + seed admin)
+--   002_init_schemas.sql              (pgcrypto: crypt / gen_salt)
+--   003_0_create_schema_auth.sql      (auth.users / roles / user_roles + seed admin)
 -- =============================================================================
+
+-- FIX (3F000 / 42883): миграции могут идти с search_path = ''.
+-- Явно задаём search_path, чтобы crypt()/gen_salt() резолвились из public.
+SET search_path = pg_catalog, public;
 
 -- -----------------------------------------------------------------------------
 -- 0. Очистка устаревшей auth.user_permissions (удалена из модели).
---    Guarded DROP: на чистой БД таблицы нет — не пишем NOTICE.
---    CASCADE снесёт старый view effective_user_permissions, если он на неё
---    ссылался; пересоздадим ниже через CREATE OR REPLACE.
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -151,15 +152,12 @@ INSERT INTO auth.roles (code, name, description) VALUES
 -- =============================================================================
 -- 5. SEED: пользователи (login = password)
 -- =============================================================================
--- 5.1 admin: сброс пароля с исходного hardcoded hash на 'admin'/'admin'.
---     Идемпотентно: обновляем только если хеш всё ещё исходный (из 003).
 UPDATE auth.users
 SET password_hash = crypt('admin', gen_salt('bf', 12)),
     updated_at    = now()
 WHERE login = 'admin'
   AND password_hash = '$2b$12$90RI9oyUR3E4cf8gmNukBe4RJjVOrOH6SzOIlN0ACDetEzbZA2hNW';
 
--- 5.2 остальные пользователи: login = password
 WITH new_users(login, display_name, email) AS (
     VALUES
         ('superuser',   'Superuser',             'superuser@example.com'),
@@ -180,9 +178,6 @@ FROM new_users
 -- =============================================================================
 -- 6. SEED: role_permissions
 -- =============================================================================
--- 6.1 SUPERUSER — всегда ВСЕ пермишены (детерминированно: DELETE + INSERT).
---     Гарантирует, что при добавлении новых пермишенов в каталог
---     SUPERUSER их автоматически получает.
 DELETE FROM auth.role_permissions
 WHERE role_id = (SELECT id FROM auth.roles WHERE code = 'SUPERUSER');
 
@@ -192,7 +187,6 @@ FROM auth.roles r
          CROSS JOIN auth.permissions p
 WHERE r.code = 'SUPERUSER';
 
--- 6.2 ADMIN — всё, кроме system:admin.
 DELETE FROM auth.role_permissions
 WHERE role_id = (SELECT id FROM auth.roles WHERE code = 'ADMIN');
 
@@ -202,7 +196,6 @@ FROM auth.roles r
          JOIN auth.permissions p ON p.code <> 'system:admin'
 WHERE r.code = 'ADMIN';
 
--- 6.3 OPERATOR
 INSERT INTO auth.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth.roles r
@@ -217,7 +210,6 @@ FROM auth.roles r
 WHERE r.code = 'OPERATOR'
     ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- 6.4 REVIEWER
 INSERT INTO auth.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth.roles r
@@ -233,7 +225,6 @@ FROM auth.roles r
 WHERE r.code = 'REVIEWER'
     ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- 6.5 VIEWER
 INSERT INTO auth.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth.roles r
@@ -248,7 +239,6 @@ FROM auth.roles r
 WHERE r.code = 'VIEWER'
     ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- 6.6 INTEGRATION
 INSERT INTO auth.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM auth.roles r
@@ -268,7 +258,6 @@ WHERE r.code = 'INTEGRATION'
 -- =============================================================================
 -- 7. SEED: user_roles
 -- =============================================================================
--- 7.1 admin → ADMIN + SUPERUSER
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -276,7 +265,6 @@ FROM auth.users u
 WHERE u.login = 'admin'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.2 superuser → SUPERUSER
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -284,7 +272,6 @@ FROM auth.users u
 WHERE u.login = 'superuser'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.3 operator → OPERATOR
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -292,7 +279,6 @@ FROM auth.users u
 WHERE u.login = 'operator'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.4 reviewer → REVIEWER
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -300,7 +286,6 @@ FROM auth.users u
 WHERE u.login = 'reviewer'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.5 viewer → VIEWER
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -308,7 +293,6 @@ FROM auth.users u
 WHERE u.login = 'viewer'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.6 integration → INTEGRATION
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u
@@ -316,7 +300,6 @@ FROM auth.users u
 WHERE u.login = 'integration'
     ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- 7.7 __system__ → INTEGRATION
 INSERT INTO auth.user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM auth.users u

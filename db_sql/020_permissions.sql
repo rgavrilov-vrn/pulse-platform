@@ -1,16 +1,8 @@
 -- 020_permissions.sql
--- FIX (P0): добавлены гранты на incident, videoserver, ref для приложения
---           и readonly-роли. Ранее приложение не имело доступа к incident.*,
---           videoserver.* и ref.* — первый же SELECT падал.
--- FIX: добавлены гранты на SEQUENCES (incident_number_seq, BIGSERIAL в
---      status_history/audit_log).
--- FIX: для audit выданы только SELECT + INSERT (append-only).
--- FIX: ALTER DEFAULT PRIVILEGES прописан для всех схем и разбит по схемам
---      (ALTER DEFAULT PRIVILEGES не принимает список схем).
---
--- ВАЖНО: скрипт выполняется владельцем БД / суперпользователем —
---        тем же, кто создавал объекты в миграциях. Иначе default privileges
---        не применятся к объектам, созданным другой ролью.
+-- Гранты на бизнес-схемы для pulse_platform_app и pulse_platform_readonly.
+-- Должен выполняться владельцем БД / суперпользователем — тем же, кто
+-- создавал объекты в предыдущих миграциях (иначе default privileges
+-- не применятся к объектам, созданным другой ролью).
 
 -- ============================================================================
 -- pulse_platform_app (read/write на бизнес-схемах)
@@ -25,8 +17,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 -- audit — append-only: приложению запрещены UPDATE/DELETE.
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA audit TO pulse_platform_app;
 
--- USAGE, SELECT на все последовательности: BIGSERIAL в incident, audit, outbox
--- и явно созданная incident_number_seq.
 GRANT USAGE, SELECT
              ON ALL SEQUENCES IN SCHEMA auth, ref, incident, videoserver, outbox, audit, goodwan
                  TO pulse_platform_app;
@@ -87,3 +77,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA audit
     GRANT SELECT ON TABLES TO pulse_platform_readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA goodwan
     GRANT SELECT ON TABLES TO pulse_platform_readonly;
+
+-- ============================================================================
+-- Рекомендуемые дефолты для ролей приложения (выполнить один раз
+-- суперпользователем отдельно от миграций):
+--
+--   ALTER ROLE pulse_platform_app       SET search_path = pg_catalog, public;
+--   ALTER ROLE pulse_platform_readonly  SET search_path = pg_catalog, public;
+--
+-- Без этого приложение может попасть в ту же ловушку 3F000/42883,
+-- что и миграции, если его инструмент/драйвер выставляет search_path = ''.
+-- ============================================================================

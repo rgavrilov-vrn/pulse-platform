@@ -1,17 +1,20 @@
 -- =============================================================================
 -- 007_create_schema_incident.sql
--- Чистое создание схемы incident и начальных справочников.
--- Предусловия: схема incident отсутствует; auth.users уже создана;
--- функция gen_random_uuid() доступна в используемой версии PostgreSQL.
--- Скрипт не удаляет существующие объекты и не предназначен для повторного запуска.
+-- -----------------------------------------------------------------------------
+-- Создание схемы incident и справочников домена.
+--
+-- Предусловия:
+--   * auth.users создана (003_0);
+--   * доступна gen_random_uuid() — на PG 13+ это pg_catalog, расширений не нужно;
+--   * 002_not_use_create_schema.sql НЕ применяется (guard падает).
+--
 -- Все DDL и seed выполняются одной транзакцией.
--- Инцидент не содержит доменных полей места, камеры и сотрудника:
--- доменные связи хранятся в context_refs, расширяемые атрибуты — в metadata.
+-- Матрица переходов статусов НЕ заполняется здесь — см. 011_seed_status_transitions.sql.
 -- =============================================================================
 
 BEGIN;
 
-CREATE SCHEMA incident;
+CREATE SCHEMA IF NOT EXISTS incident;
 
 -- 1. Источники и справочники
 CREATE TABLE incident.sources (
@@ -72,12 +75,12 @@ CREATE TABLE incident.status_transitions (
                                              CONSTRAINT chk_status_transitions_to CHECK (to_status IN
                                                                                          ('DRAFT','RECORDED','NEEDS_REVIEW','CONFIRMED','REJECTED','CLOSED','CANCELLED','ARCHIVED'))
 );
--- Матрица переходов заполняется отдельным существующим скриптом 008_1.
+-- Матрица переходов заполняется в 011_seed_status_transitions.sql.
 
 -- 2. Инциденты и нумерация
 CREATE SEQUENCE incident.incident_number_seq START WITH 1 INCREMENT BY 1;
 
-CREATE FUNCTION incident.generate_incident_number()
+CREATE OR REPLACE FUNCTION incident.generate_incident_number()
     RETURNS VARCHAR LANGUAGE plpgsql AS $$
 DECLARE
 next_number BIGINT;
@@ -131,7 +134,7 @@ CREATE INDEX ix_incidents_category_id
 COMMENT ON COLUMN incident.incidents.category_id IS
     'Единственная категория инцидента. Тип инцидента определяется группой категории.';
 
-CREATE FUNCTION incident.set_updated_at()
+CREATE OR REPLACE FUNCTION incident.set_updated_at()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     NEW.updated_at := now();
@@ -139,7 +142,7 @@ RETURN NEW;
 END;
 $$;
 
-CREATE FUNCTION incident.set_incident_number()
+CREATE OR REPLACE FUNCTION incident.set_incident_number()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.number IS NULL OR NEW.number = '' THEN
@@ -172,7 +175,6 @@ CREATE TABLE incident.context_refs (
     CONSTRAINT chk_context_refs_entity_type CHECK (entity_type ~ '^[a-z][a-z0-9_]*$')
 );
 
--- Сразу окончательная структура: UUID PK, soft delete, без legacy checkpoint.
 CREATE TABLE incident.incident_checklist_items (
                                                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                                    incident_id UUID NOT NULL REFERENCES incident.incidents(id) ON DELETE RESTRICT,
@@ -332,7 +334,7 @@ CREATE INDEX ix_status_history_incident ON incident.status_history (incident_id,
 CREATE INDEX ix_comments_incident ON incident.comments (incident_id, created_at DESC);
 CREATE UNIQUE INDEX ux_current_incident_assignment ON incident.assignments (incident_id) WHERE is_current;
 
--- 8. Реестр: удалённые привязки не учитываются в checklist_count.
+-- 8. Реестр
 CREATE VIEW incident.incident_list AS
 SELECT
     i.id, i.number, i.source, i.creation_mode, i.status, i.severity,
@@ -352,11 +354,14 @@ FROM incident.incidents i
 
 -- 9. Начальные данные
 INSERT INTO incident.sources (code, name) VALUES
-                                              ('videoserver', 'Video Server'), ('manual', 'Manual');
+                                              ('videoserver', 'Video Server'),
+                                              ('manual', 'Manual')
+    ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO incident.category_groups (code, name, icon, sort_order) VALUES
                                                                         ('EVENT', 'Событие', 'event', 10),
-                                                                        ('VIOLATION', 'Нарушение', 'violation', 20);
+                                                                        ('VIOLATION', 'Нарушение', 'violation', 20)
+    ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO incident.violation_categories (group_id, code, name, description, sort_order)
 SELECT g.id, seed.code, seed.name, seed.description, seed.sort_order
@@ -366,12 +371,9 @@ FROM (VALUES
           ('VIOLATION', 'VIOLATION_BIOSAFETY', 'Биобезопасность',
            'Контроль биобезопасности: персонал, транспорт, санитарная обработка и перемещение ТМЦ', 10)
      ) AS seed(group_code, code, name, description, sort_order)
-         JOIN incident.category_groups g ON g.code = seed.group_code;
+         JOIN incident.category_groups g ON g.code = seed.group_code
+    ON CONFLICT (code) DO NOTHING;
 
--- Сохраняем шесть исходных кодов; добавляем 15 типов КТ из документа.
--- MEDIUM для новых типов — техническое значение по умолчанию, не оценка риска.
--- Новые шаблоны комментария и требования к материалам не задаются:
--- документ не содержит таких настроек.
 INSERT INTO incident.checklist_items
 (category_id, code, name, description, comment_template, default_severity, sort_order)
 SELECT c.id, seed.code, seed.name, seed.description, seed.comment_template,
@@ -399,38 +401,8 @@ FROM (VALUES
           ('VIOLATION_BIOSAFETY', 'BIOSECURITY_GREY_ZONE', 'Серая зона', 'Контроль процесса отгрузки кормовозов и скотовозов, проверка отсутствия открытого доступа на чистую зону (верхние люки бункеров, разгрузочные камлоки, пожарные выходы), целостность ограждения.', NULL, 'MEDIUM', 170),
           ('VIOLATION_BIOSAFETY', 'BIOSECURITY_MORTALITY_DISPOSAL', 'Трупник, крематор', 'Соблюдение требований по вывозу падежа, согласно регламенту ББ.', NULL, 'MEDIUM', 180)
      ) AS seed(category_code, code, name, description, comment_template, default_severity, sort_order)
-         JOIN incident.violation_categories c ON c.code = seed.category_code;
-
-BEGIN;
-
-INSERT INTO incident.status_transitions
-(from_status, to_status)
-VALUES
-    ('DRAFT', 'RECORDED'),
-    ('DRAFT', 'CANCELLED'),
-
-    ('RECORDED', 'NEEDS_REVIEW'),
-    ('RECORDED', 'CONFIRMED'),
-    ('RECORDED', 'REJECTED'),
-    ('RECORDED', 'CANCELLED'),
-
-    ('NEEDS_REVIEW', 'CONFIRMED'),
-    ('NEEDS_REVIEW', 'REJECTED'),
-    ('NEEDS_REVIEW', 'CANCELLED'),
-
-    ('CONFIRMED', 'CLOSED'),
-    ('CONFIRMED', 'CANCELLED'),
-
-    ('REJECTED', 'DRAFT'),
-    ('REJECTED', 'CANCELLED'),
-
-    ('CLOSED', 'ARCHIVED'),
-    ('CANCELLED', 'ARCHIVED')
-
-    ON CONFLICT DO NOTHING;
-
-
-COMMIT;
+         JOIN incident.violation_categories c ON c.code = seed.category_code
+    ON CONFLICT (code) DO NOTHING;
 
 -- 10. Комментарии к итоговой модели
 COMMENT ON SCHEMA incident IS 'Инциденты: доменно-нейтральная сущность и собственные справочники.';
@@ -476,11 +448,3 @@ COMMENT ON TABLE incident.assignments IS 'История назначений; �
 COMMENT ON TABLE incident.status_history IS 'История переходов статусов.';
 
 COMMIT;
-
--- Проверка после успешного COMMIT: 2 группы, 2 категории, 21 пункт.
--- EVENT_GENERAL: 3; VIOLATION_BIOSAFETY: 18 (3 исходных + 15 из документа).
--- SELECT g.code AS group_code, c.code AS category_code, count(i.id) AS item_count
--- FROM incident.category_groups g
--- JOIN incident.violation_categories c ON c.group_id = g.id
--- LEFT JOIN incident.checklist_items i ON i.category_id = c.id AND i.is_active
--- GROUP BY g.code, c.code ORDER BY g.code, c.code;

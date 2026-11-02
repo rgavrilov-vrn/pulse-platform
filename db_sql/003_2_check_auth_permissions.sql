@@ -15,7 +15,7 @@ FROM auth.users u
          LEFT JOIN auth.roles r       ON r.id = ur.role_id
 GROUP BY u.login ORDER BY u.login;
 
--- Пароль admin теперь реально 'admin' (bcrypt cost 12, prefix $2a$):
+-- Пароль admin теперь реально 'admin' (bcrypt cost 12, prefix $2b$):
 SELECT login, left(password_hash, 7) AS hash_prefix
 FROM auth.users WHERE login = 'admin';
 

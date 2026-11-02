@@ -1,6 +1,4 @@
 -- 005_create_schema_outbox.sql
--- FIX: добавлены CHECK-констрейнты на status и attempts (по аналогии
---      с incident.source_events и incident.report_jobs).
 
 CREATE SCHEMA IF NOT EXISTS outbox;
 
@@ -33,9 +31,6 @@ CREATE TABLE IF NOT EXISTS outbox.processed_events
 CREATE INDEX IF NOT EXISTS ix_processed_events_time
     ON outbox.processed_events (processed_at);
 
--- -----------------------------------------------------------------------------
--- Комментарии
--- -----------------------------------------------------------------------------
 COMMENT ON SCHEMA outbox IS 'Transactional Outbox: надёжная публикация доменных событий + дедупликация у потребителей.';
 
 COMMENT ON TABLE  outbox.outbox_events IS 'Исходящие события (outbox pattern). Пишутся в одной транзакции с изменением домена, публикуются асинхронно.';
