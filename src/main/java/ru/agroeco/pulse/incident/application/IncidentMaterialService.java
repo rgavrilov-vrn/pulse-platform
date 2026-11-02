@@ -103,7 +103,7 @@ public class IncidentMaterialService {
     public MaterialView upload(UUID incidentId, MultipartFile file, UUID actorId) throws IOException {
         requireIncident(incidentId, false, true);
         if (file.isEmpty()) throw error(HttpStatus.BAD_REQUEST, "Empty file");
-        if (file.getSize() > maxBytes) throw error(HttpStatus.PAYLOAD_TOO_LARGE, "File size limit exceeded");
+        if (file.getSize() > maxBytes) throw error(HttpStatus.CONTENT_TOO_LARGE, "File size limit exceeded");
         String supplied = file.getOriginalFilename();
         String name = supplied == null ? "file" : supplied.replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "_");
@@ -130,7 +130,7 @@ public class IncidentMaterialService {
                 int count;
                 while ((count = input.read(buffer)) != -1) {
                     length += count;
-                    if (length > maxBytes) throw error(HttpStatus.PAYLOAD_TOO_LARGE, "File size limit exceeded");
+                    if (length > maxBytes) throw error(HttpStatus.CONTENT_TOO_LARGE, "File size limit exceeded");
                     digest.update(buffer, 0, count);
                     output.write(buffer, 0, count);
                 }
