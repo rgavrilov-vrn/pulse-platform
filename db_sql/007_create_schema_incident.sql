@@ -96,6 +96,7 @@ CREATE TABLE incident.incidents (
                                     creation_mode VARCHAR(32) NOT NULL,
                                     status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
                                     severity VARCHAR(32) NOT NULL DEFAULT 'MEDIUM',
+                                    category_id UUID NOT NULL REFERENCES incident.violation_categories(id),
                                     event_time TIMESTAMPTZ NOT NULL,
                                     received_at TIMESTAMPTZ,
                                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -123,6 +124,12 @@ CREATE TABLE incident.incidents (
                                                                            ('DRAFT','RECORDED','NEEDS_REVIEW','CONFIRMED','REJECTED','CLOSED','CANCELLED','ARCHIVED')),
                                     CONSTRAINT chk_incidents_severity CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL'))
 );
+
+CREATE INDEX ix_incidents_category_id
+    ON incident.incidents (category_id);
+
+COMMENT ON COLUMN incident.incidents.category_id IS
+    'Единственная категория инцидента. Тип инцидента определяется группой категории.';
 
 CREATE FUNCTION incident.set_updated_at()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
