@@ -1,7 +1,6 @@
 package ru.agroeco.pulse.incident.adapter.http.dto;
 
 import ru.agroeco.pulse.incident.domain.*;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +15,7 @@ public record IncidentDetails(
         IncidentStatus status,
         IncidentSeverity severity,
         IncidentKind kind,
-        List<IncidentChecklistItemView> checkpoints,   // NEW (было String checkpoint)
+        List<IncidentChecklistItemView> checkpoints,
         Instant eventTime,
         Instant receivedAt,
         Instant createdAt,
@@ -26,8 +25,8 @@ public record IncidentDetails(
         UUID operatorId,
         UUID assignedTo,
         Instant dueAt,
-        Instant confirmedAt,
         UUID confirmedBy,
+        Instant confirmedAt,
         Instant closedAt,
         UUID closedBy,
         String resolutionComment,
@@ -35,5 +34,7 @@ public record IncidentDetails(
         UUID cancelledBy,
         String cancellationReason,
         String comment,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        UUID categoryId,
+        String categoryName
 ) {}
