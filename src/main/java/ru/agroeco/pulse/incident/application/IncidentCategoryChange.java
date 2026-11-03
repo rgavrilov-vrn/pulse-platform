@@ -36,7 +36,7 @@ public class IncidentCategoryChange {
             var actual=new HashSet<>(current.stream().map(IncidentChecklistItemEntity::getId).toList());
             if(req.expectedVersion()==null || !Objects.equals(req.expectedVersion(),incident.getVersion())
                     || !Objects.equals(req.expectedCategoryId(),incident.getCategoryId()) || expected==null
-                    || expected.contains(null) || expected.size()!=new HashSet<>(expected).size()
+                    || expected.stream().anyMatch(Objects::isNull) || expected.size()!=new HashSet<>(expected).size()
                     || !actual.equals(new HashSet<>(expected)))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Карточка или привязки изменились. Обновите карточку и подтвердите смену категории заново.");
         } else {
