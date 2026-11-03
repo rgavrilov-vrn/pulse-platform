@@ -262,7 +262,7 @@ public class IncidentService {
     @Transactional
     public IncidentChecklistItemView addCheckpoint(
             UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
-        IncidentEntity incident = incidents.findById(id)
+        IncidentEntity incident = incidents.findById(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
         if (incident.getStatus().isTerminal()) {
             throw new BusinessRuleException(
