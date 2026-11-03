@@ -283,18 +283,31 @@ public class IncidentService {
 
     @Transactional
     public void removeCheckpoint(UUID incidentId, UUID linkId, UUID actorId) {
-        incidents.findByIdForUpdate(incidentId)
+        var incident=incidents.findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
+        if(incident.getStatus()!=IncidentStatus.DRAFT)
+            throw new BusinessRuleException("Снимать привязки контрольных точек можно только в черновике");
         IncidentChecklistItemEntity link = checklistLinks.findById(linkId)
                 .filter(l -> l.getIncidentId().equals(incidentId)).filter(l -> !l.isDeleted())
                 .orElseThrow(() -> new NotFoundException("Checkpoint link not found: " + linkId));
-        link.setDeleted(true);
-        link.setDeletedAt(Instant.now());
-        link.setDeletedBy(actorId);
-        checklistLinks.saveAndFlush(link);
+        var metadata=new HashMap<String,Object>();
+        if(incident.getMetadata()!=null) metadata.putAll(incident.getMetadata());
+        Object legacyId=metadata.get("checklistItemId"),legacyCode=metadata.get("checkpoint"),legacyName=metadata.get("checklistItemName");
+        boolean matches;
+        if(legacyId!=null && !legacyId.toString().isBlank()) matches=link.getChecklistItemId().toString().equals(legacyId.toString());
+        else if(legacyCode!=null && !legacyCode.toString().isBlank()) matches=checklistItems.findById(link.getChecklistItemId())
+                .map(item->item.getCode().equals(legacyCode.toString())).orElse(false);
+        else matches=legacyName!=null && legacyName.toString().equals(link.getItemNameSnapshot());
+        if(matches) {
+            metadata.remove("checkpoint");metadata.remove("checklistItemId");metadata.remove("checklistItemName");
+        }
+        var now=Instant.now();
+        link.setDeleted(true);link.setDeletedAt(now);link.setDeletedBy(actorId);
+        incident.setMetadata(metadata);incident.setUpdatedBy(actorId);incident.setUpdatedAt(now);
+        checklistLinks.saveAndFlush(link);incidents.saveAndFlush(incident);
         events.dispatch(IncidentCheckpointRemoved.builder()
                 .incidentId(incidentId).linkId(linkId).checklistItemId(link.getChecklistItemId())
-                .actorId(actorId).occurredAt(Instant.now()).build());
+                .actorId(actorId).occurredAt(now).build());
     }
 
     private IncidentChecklistItemEntity addCheckpointLink(
