@@ -2,6 +2,7 @@ package ru.agroeco.pulse.incident.domain.event;
 
 import lombok.Builder;
 import ru.agroeco.pulse.incident.domain.IncidentKind;
+import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 
@@ -18,9 +19,14 @@ public record IncidentUpdated(
         String comment,
         Map<String, Object> oldData,
         UUID actorId,
-        Instant occurredAt
+        Instant occurredAt,
+        IncidentSeverity severity,
+        Map<String, Object> metadata
 ) implements DomainEvent {
-
+    public IncidentUpdated(UUID incidentId, IncidentKind kind, Instant eventTime,
+            String comment, Map<String,Object> oldData, UUID actorId, Instant occurredAt) {
+        this(incidentId,kind,eventTime,comment,oldData,actorId,occurredAt,null,null);
+    }
     @Override public DomainEventType eventType() { return DomainEventType.INCIDENT_UPDATED; }
     @Override public UUID entityId() { return incidentId; }
     @Override public String entitySchema() { return "incident"; }
@@ -35,6 +41,8 @@ public record IncidentUpdated(
         if (kind      != null) data.put("kind", kind.name());
         if (eventTime != null) data.put("eventTime", eventTime.toString());
         if (comment   != null) data.put("comment", comment);
+        if (severity  != null) data.put("severity", severity.name());
+        if (metadata  != null) data.put("metadata", metadata);
         return data;
     }
 }

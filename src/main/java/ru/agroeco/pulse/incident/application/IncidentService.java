@@ -39,6 +39,7 @@ public class IncidentService {
     private final ViolationCategoryRepository categories;
     private final CategoryGroupRepository groups;
     private final IncidentSummaryEnricher summaryEnricher;
+    private final IncidentCardFields cardFields;
 
     @Transactional
     public IncidentDetails create(CreateIncidentRequest req, UUID actorId) {
@@ -225,6 +226,9 @@ public class IncidentService {
         oldData.put("categoryId", incident.getCategoryId().toString());
         oldData.put("eventTime", incident.getEventTime().toString());
         if (incident.getComment() != null) oldData.put("comment", incident.getComment());
+        if (incident.getSeverity() != null) oldData.put("severity", incident.getSeverity().name());
+        oldData.put("metadata", incident.getMetadata()==null ? Map.of() : new HashMap<>(incident.getMetadata()));
+        cardFields.apply(incident,req);
         if (req.categoryId() != null && !req.categoryId().equals(incident.getCategoryId())) {
             changeCategory(incident, req.categoryId());
         }
@@ -235,10 +239,13 @@ public class IncidentService {
         }
         incident.setUpdatedBy(actorId);
         incidents.saveAndFlush(incident);
-        addComment(incident.getId(), new AddCommentRequest(CommentType.OPERATOR, req.comment()), actorId);
+        if (req.comment()!=null && !req.comment().isBlank() && !java.util.Objects.equals(oldData.get("comment"),req.comment())) {
+            addComment(incident.getId(), new AddCommentRequest(CommentType.OPERATOR, req.comment()), actorId);
+        }
         events.dispatch(IncidentUpdated.builder()
                 .incidentId(id).kind(deriveKind(incident)).eventTime(incident.getEventTime())
                 .comment(incident.getComment()).oldData(oldData).actorId(actorId)
+                .severity(incident.getSeverity()).metadata(new HashMap<>(incident.getMetadata()))
                 .occurredAt(Instant.now()).build());
         return toDetails(incident);
     }
