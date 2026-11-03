@@ -38,6 +38,7 @@ public class IncidentService {
     private final ChecklistItemRepository checklistItems;
     private final ViolationCategoryRepository categories;
     private final CategoryGroupRepository groups;
+    private final IncidentSummaryEnricher summaryEnricher;
 
     @Transactional
     public IncidentDetails create(CreateIncidentRequest req, UUID actorId) {
@@ -72,7 +73,10 @@ public class IncidentService {
     @Transactional(readOnly = true)
     public PageResponse<IncidentSummary> list(Specification<IncidentEntity> spec, Pageable pageable) {
         Page<IncidentEntity> page = incidents.findAll(spec, pageable);
-        return PageResponse.of(page, this::toSummary);
+        var response = PageResponse.of(page, this::toSummary);
+        return new PageResponse<>(summaryEnricher.enrich(response.content()),response.page(),
+                response.size(),response.totalElements(),response.totalPages(),
+                response.hasNext(),response.hasPrevious());
     }
 
     @Transactional(readOnly = true)
@@ -258,7 +262,7 @@ public class IncidentService {
     @Transactional
     public IncidentChecklistItemView addCheckpoint(
             UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
-        IncidentEntity incident = incidents.findById(incidentId)
+        IncidentEntity incident = incidents.findById(id)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
         if (incident.getStatus().isTerminal()) {
             throw new BusinessRuleException(
