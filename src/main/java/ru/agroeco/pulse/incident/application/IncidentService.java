@@ -40,6 +40,7 @@ public class IncidentService {
     private final CategoryGroupRepository groups;
     private final IncidentSummaryEnricher summaryEnricher;
     private final IncidentCardFields cardFields;
+    private final IncidentCategoryChange categoryChange;
 
     @Transactional
     public IncidentDetails create(CreateIncidentRequest req, UUID actorId) {
@@ -107,7 +108,7 @@ public class IncidentService {
 
     @Transactional
     public IncidentDetails changeStatus(UUID id, ChangeStatusRequest req, UUID actorId) {
-        IncidentEntity incident = incidents.findById(id)
+        IncidentEntity incident = incidents.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
         IncidentStatus from = incident.getStatus();
         IncidentStatus to = req.toStatus();
@@ -216,7 +217,7 @@ public class IncidentService {
 
     @Transactional
     public IncidentDetails update(UUID id, UpdateIncidentRequest req, UUID actorId) {
-        IncidentEntity incident = incidents.findById(id)
+        IncidentEntity incident = incidents.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
         if (incident.getStatus().isTerminal()) {
             throw new BusinessRuleException(
@@ -228,14 +229,17 @@ public class IncidentService {
         if (incident.getComment() != null) oldData.put("comment", incident.getComment());
         if (incident.getSeverity() != null) oldData.put("severity", incident.getSeverity().name());
         oldData.put("metadata", incident.getMetadata()==null ? Map.of() : new HashMap<>(incident.getMetadata()));
+        boolean changingCategory=req.categoryId()!=null && !req.categoryId().equals(incident.getCategoryId());
+        if(changingCategory) categoryChange.apply(incident,req,actorId);
         cardFields.apply(incident,req);
-        if (req.categoryId() != null && !req.categoryId().equals(incident.getCategoryId())) {
-            changeCategory(incident, req.categoryId());
-        }
         if (req.eventTime() != null) incident.setEventTime(req.eventTime());
         if (req.comment() != null) incident.setComment(req.comment().isBlank() ? null : req.comment());
         if (req.checkpoint() != null && !req.checkpoint().isBlank()) {
-            addCheckpointLink(incident, req.checkpoint(), actorId);
+            var link=addCheckpointLink(incident, req.checkpoint(), actorId);
+            if(changingCategory) events.dispatch(IncidentCheckpointAdded.builder()
+                    .incidentId(id).linkId(link.getId()).checklistItemId(link.getChecklistItemId())
+                    .checklistItemCode(req.checkpoint()).kind(deriveKind(incident))
+                    .actorId(actorId).occurredAt(Instant.now()).build());
         }
         incident.setUpdatedBy(actorId);
         incidents.saveAndFlush(incident);
@@ -250,26 +254,10 @@ public class IncidentService {
         return toDetails(incident);
     }
 
-    private void changeCategory(IncidentEntity incident, UUID newCategoryId) {
-        ViolationCategoryEntity category = categories.findById(newCategoryId)
-                .filter(ViolationCategoryEntity::isActive)
-                .orElseThrow(() -> new BusinessRuleException(
-                        "Category '" + newCategoryId + "' does not exist or is inactive"));
-        boolean hasForeignCheckpoints = checklistLinks
-                .findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(incident.getId())
-                .stream().anyMatch(link -> checklistItems.findById(link.getChecklistItemId())
-                        .map(item -> !category.getId().equals(item.getCategoryId())).orElse(true));
-        if (hasForeignCheckpoints) {
-            throw new BusinessRuleException(
-                    "Cannot change category: incident has checkpoints from another category");
-        }
-        incident.setCategoryId(category.getId());
-    }
-
     @Transactional
     public IncidentChecklistItemView addCheckpoint(
             UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
-        IncidentEntity incident = incidents.findById(incidentId)
+        IncidentEntity incident = incidents.findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
         if (incident.getStatus().isTerminal()) {
             throw new BusinessRuleException(
@@ -295,6 +283,8 @@ public class IncidentService {
 
     @Transactional
     public void removeCheckpoint(UUID incidentId, UUID linkId, UUID actorId) {
+        incidents.findByIdForUpdate(incidentId)
+                .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
         IncidentChecklistItemEntity link = checklistLinks.findById(linkId)
                 .filter(l -> l.getIncidentId().equals(incidentId)).filter(l -> !l.isDeleted())
                 .orElseThrow(() -> new NotFoundException("Checkpoint link not found: " + linkId));
