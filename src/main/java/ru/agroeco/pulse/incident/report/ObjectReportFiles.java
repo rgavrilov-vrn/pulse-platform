@@ -17,7 +17,7 @@ final class ObjectReportFiles {
     private static final ZoneId ZONE=ZoneId.of("Europe/Moscow");
     private static final DateTimeFormatter TIME=DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss").withZone(ZONE);
     private static String value(Object v){return v==null?"":v.toString();}
-    private static String field(JsonNode n,String key){JsonNode v=n.get(key);return v==null||v.isNull()?"":v.asText();}
+    private static String field(JsonNode n,String key){JsonNode v=n.get(key);return v==null||v.isNull()?"":v.asString();}
     private static String time(Instant v){return v==null?"—":TIME.format(v);}
     private static String kind(String v){return "VIOLATION".equals(v)?"Нарушение":"Событие";}
     private static String status(String v){return switch(value(v)){

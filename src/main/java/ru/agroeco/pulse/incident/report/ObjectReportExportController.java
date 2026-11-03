@@ -28,7 +28,7 @@ public class ObjectReportExportController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Формат: pdf или xlsx");
         var first=report.list(filter,0,100);
         if(first.totalElements()>maxRows)
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"Найдено "+first.totalElements()+" записей; лимит выгрузки "+maxRows+". Уточните фильтры. Данные не обрезаны.");
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,"Найдено "+first.totalElements()+" записей; лимит выгрузки "+maxRows+". Уточните фильтры. Данные не обрезаны.");
         var entries=new ArrayList<>(first.content());
         for(int page=1;page<first.totalPages();page++) entries.addAll(report.list(filter,page,100).content());
         byte[] bytes="pdf".equals(format)?ObjectReportFiles.pdf(entries,filter):ObjectReportFiles.xlsx(entries,filter);
