@@ -108,14 +108,14 @@ public class ObjectReportController {
         if(f.categoryIds()!=null && !f.categoryIds().isEmpty()){w.append(" AND i.category_id IN (:categories)");p.addValue("categories",f.categoryIds());}
         if(f.statuses()!=null && !f.statuses().isEmpty()){w.append(" AND i.status IN (:statuses)");p.addValue("statuses",f.statuses());}
         if(f.checklistItemIds()!=null && !f.checklistItemIds().isEmpty()){
-            w.append("""
+            w.append(" ").append("""
                 AND (EXISTS (SELECT 1 FROM incident.incident_checklist_items cp WHERE cp.incident_id=i.id AND NOT cp.is_deleted AND cp.checklist_item_id IN (:points))
                   OR EXISTS (SELECT 1 FROM incident.checklist_items ci WHERE ci.id IN (:points)
                      AND (ci.id::text=i.metadata->>'checklistItemId' OR ci.code=i.metadata->>'checkpoint')))
                 """);p.addValue("points",f.checklistItemIds());
         }
         if(f.search()!=null && !f.search().isBlank()){
-            p.addValue("q",f.search().trim());w.append("""
+            p.addValue("q",f.search().trim());w.append(" ").append("""
                 AND (position(lower(:q) in lower(concat_ws(' ',i.number,i.report_object_name,i.report_category,i.report_operator,i.comment,i.cancellation_reason,i.resolution_comment,i.metadata->>'checkpoint',i.metadata->>'checklistItemName')))>0
                   OR EXISTS (SELECT 1 FROM incident.comments cm WHERE cm.incident_id=i.id AND NOT cm.is_deleted AND position(lower(:q) in lower(cm.body))>0)
                   OR EXISTS (SELECT 1 FROM incident.incident_checklist_items cp WHERE cp.incident_id=i.id AND NOT cp.is_deleted AND position(lower(:q) in lower(concat_ws(' ',cp.item_name_snapshot,cp.comment)))>0)
