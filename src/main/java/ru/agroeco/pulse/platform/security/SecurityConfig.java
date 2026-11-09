@@ -6,6 +6,7 @@ import org.slf4j.MDC;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -42,7 +43,7 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .requestCache(RequestCacheConfigurer::disable)   // stateless JWT API
+                .requestCache(RequestCacheConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(
@@ -53,10 +54,13 @@ public class SecurityConfig {
                                 "/actuator/health", "/actuator/health/**",
                                 "/actuator/info"
                         ).permitAll()
-                        // Метрики Prometheus — только для системного администратора.
-                        // Раньше были в permitAll → инфо-лик (имена таблиц, HTTP-эндпоинтов).
                         .requestMatchers("/actuator/prometheus", "/actuator/metrics/**")
                         .hasAuthority("system:admin")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/trassir/ingest"
+                        )
+                        .hasAuthority("trassir:ingest")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->
@@ -79,9 +83,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(List.of(
                 "Authorization", "Content-Type", "Accept",
                 "X-Correlation-Id", "X-Requested-With", "Origin"));
-        // Клиент должен уметь читать сгенерированный сервером ID.
         configuration.setExposedHeaders(List.of("X-Correlation-Id"));
-        // JWT stateless — cookie credentials не нужны. false упрощает CORS.
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -96,7 +98,6 @@ public class SecurityConfig {
 
     @Bean
     PasswordEncoder passwordEncoder() {
-        // cost 12 — согласовано с seed-хешами из 003_1 (crypt(..., gen_salt('bf', 12))).
         return new BCryptPasswordEncoder(12);
     }
 
