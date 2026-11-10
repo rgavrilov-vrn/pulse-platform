@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "admin_audit_log")
+@Table(name = "admin_audit_log", schema = "trassir")
 @Getter
 @Setter
 @NoArgsConstructor
