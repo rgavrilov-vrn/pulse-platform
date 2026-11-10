@@ -2,10 +2,12 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.modulith.events.ApplicationModuleListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import ru.agroeco.pulse.platform.trassir.domain.TrassirEvent;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirEventRepository;
 import tools.jackson.databind.JsonNode;
@@ -23,7 +25,8 @@ public class TrassirEventProcessor {
     private final TrassirEventRouter router;
     private final ObjectMapper objectMapper;
 
-    @ApplicationModuleListener
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onEventsAccepted(TrassirEventsAcceptedEvent accepted) {
         for (UUID eventId : accepted.eventIds()) {
             try {
