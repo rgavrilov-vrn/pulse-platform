@@ -28,6 +28,10 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
         Instant receivedAt = Instant.now();
         ParsedTrassirEnvelope envelope = parser.parse(rawBody);
 
+        if (rawRepository.existsByBatchId(envelope.batchId())) {
+            return;
+        }
+
         TrassirIngestRaw raw = new TrassirIngestRaw();
         raw.setBatchId(envelope.batchId());
         raw.setReceivedAt(receivedAt);
