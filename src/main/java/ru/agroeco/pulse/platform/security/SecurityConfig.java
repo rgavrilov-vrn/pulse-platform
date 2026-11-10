@@ -61,6 +61,11 @@ public class SecurityConfig {
                                 "/api/v1/trassir/ingest"
                         )
                         .hasAuthority("trassir:ingest")
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/v1/trassir/admin/data"
+                        )
+                        .hasAuthority("trassir:admin")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->
