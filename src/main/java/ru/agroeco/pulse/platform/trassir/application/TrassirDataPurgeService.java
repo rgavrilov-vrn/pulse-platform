@@ -11,8 +11,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.trassir.domain.AdminAuditLog;
 import ru.agroeco.pulse.platform.trassir.repository.AdminAuditLogRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirAgentHeartbeatRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirEventRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirIngestRawRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirObjectRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirServerStateRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotObjectRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotPartRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotStreamRepository;
+import ru.agroeco.pulse.platform.trassir.repository.TrassirSystemEventRepository;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,15 +32,40 @@ public class TrassirDataPurgeService {
 
     private final TrassirEventRepository eventRepository;
     private final TrassirIngestRawRepository rawRepository;
+    private final TrassirSnapshotPartRepository snapshotPartRepository;
+    private final TrassirSnapshotObjectRepository snapshotObjectRepository;
+    private final TrassirSnapshotRepository snapshotRepository;
+    private final TrassirSnapshotStreamRepository snapshotStreamRepository;
+    private final TrassirObjectRepository objectRepository;
+    private final TrassirSystemEventRepository systemEventRepository;
+    private final TrassirServerStateRepository serverStateRepository;
+    private final TrassirAgentHeartbeatRepository agentHeartbeatRepository;
     private final AdminAuditLogRepository auditLogRepository;
 
     @Transactional
     public Map<String, Object> purgeAll() {
         int deletedEvents = eventRepository.deleteAllEvents();
         int deletedRaw = rawRepository.deleteAllRaw();
+        int deletedSnapshotParts = snapshotPartRepository.deleteAllParts();
+        int deletedSnapshotObjects = snapshotObjectRepository.deleteAllObjects();
+        int deletedSnapshots = snapshotRepository.deleteAllSnapshots();
+        int deletedSnapshotStreams = snapshotStreamRepository.deleteAllStreams();
+        int deletedObjects = objectRepository.deleteAllObjects();
+        int deletedSystemEvents = systemEventRepository.deleteAllSystemEvents();
+        int deletedServerStates = serverStateRepository.deleteAllServerStates();
+        int deletedHeartbeats = agentHeartbeatRepository.deleteAllHeartbeats();
 
         String actor = currentActor();
-        String details = "{\"deletedEvents\":" + deletedEvents + ",\"deletedRawBatches\":" + deletedRaw + "}";
+        String details = "{\"deletedEvents\":" + deletedEvents
+                + ",\"deletedRawBatches\":" + deletedRaw
+                + ",\"deletedSnapshotParts\":" + deletedSnapshotParts
+                + ",\"deletedSnapshotObjects\":" + deletedSnapshotObjects
+                + ",\"deletedSnapshots\":" + deletedSnapshots
+                + ",\"deletedSnapshotStreams\":" + deletedSnapshotStreams
+                + ",\"deletedObjects\":" + deletedObjects
+                + ",\"deletedSystemEvents\":" + deletedSystemEvents
+                + ",\"deletedServerStates\":" + deletedServerStates
+                + ",\"deletedHeartbeats\":" + deletedHeartbeats + "}";
 
         auditLogRepository.save(AdminAuditLog.builder()
                 .actor(actor)
@@ -41,11 +74,19 @@ public class TrassirDataPurgeService {
                 .details(details)
                 .build());
 
-        log.warn("TRASSIR admin purge: actor={} deleted {} events and {} raw batches", actor, deletedEvents, deletedRaw);
+        log.warn("TRASSIR admin purge: actor={} details={}", actor, details);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deletedEvents", deletedEvents);
         result.put("deletedRawBatches", deletedRaw);
+        result.put("deletedSnapshotParts", deletedSnapshotParts);
+        result.put("deletedSnapshotObjects", deletedSnapshotObjects);
+        result.put("deletedSnapshots", deletedSnapshots);
+        result.put("deletedSnapshotStreams", deletedSnapshotStreams);
+        result.put("deletedObjects", deletedObjects);
+        result.put("deletedSystemEvents", deletedSystemEvents);
+        result.put("deletedServerStates", deletedServerStates);
+        result.put("deletedHeartbeats", deletedHeartbeats);
         return result;
     }
 
