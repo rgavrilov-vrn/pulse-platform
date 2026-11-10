@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.agroeco.pulse.platform.trassir.application.TrassirDataPurgeService;
+import ru.agroeco.pulse.trassir.application.TrassirDataPurgeService;
 
 import java.util.Map;
 
