@@ -5,10 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import ru.agroeco.pulse.platform.trassir.domain.TrassirServerState;
 
-import java.util.UUID;
-
-public interface TrassirServerStateRepository extends JpaRepository<TrassirServerState, UUID> {
-
+public interface TrassirServerStateRepository extends JpaRepository<TrassirServerState, String> {
     @Modifying
     @Query("delete from TrassirServerState state")
     int deleteAllServerStates();
