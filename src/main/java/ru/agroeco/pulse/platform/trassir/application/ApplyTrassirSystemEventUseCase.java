@@ -2,7 +2,6 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ru.agroeco.pulse.platform.trassir.domain.TrassirSystemEvent;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSystemEventRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -48,8 +47,8 @@ public class ApplyTrassirSystemEventUseCase implements TrassirEventUseCase {
 
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value != null && value.isTextual() && !value.asText().isBlank()
-                ? value.asText()
+        return value != null && value.isString() && !value.asString().isBlank()
+                ? value.asString()
                 : null;
     }
 }

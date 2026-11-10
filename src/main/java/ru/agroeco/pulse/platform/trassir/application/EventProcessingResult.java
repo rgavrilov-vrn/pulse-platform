@@ -1,7 +1,7 @@
 package ru.agroeco.pulse.platform.trassir.application;
 
 public record EventProcessingResult(
-        boolean success,
+        boolean successful,
         String error
 ) {
 

@@ -2,7 +2,6 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ru.agroeco.pulse.platform.trassir.domain.*;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirObjectRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotObjectRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotPartRepository;
@@ -138,8 +137,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
 
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value != null && value.isTextual() && !value.asText().isBlank()
-                ? value.asText()
+        return value != null && value.isString() && !value.asString().isBlank()
+                ? value.asString()
                 : null;
     }
 

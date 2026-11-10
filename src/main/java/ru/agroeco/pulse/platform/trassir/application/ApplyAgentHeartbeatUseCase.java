@@ -2,8 +2,6 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ru.agroeco.pulse.platform.trassir.domain.TrassirAgentHeartbeat;
-import ru.agroeco.pulse.platform.trassir.domain.TrassirServerState;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirAgentHeartbeatRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirServerStateRepository;
 import tools.jackson.databind.JsonNode;
@@ -61,8 +59,8 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
 
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value != null && value.isTextual() && !value.asText().isBlank()
-                ? value.asText()
+        return value != null && value.isString() && !value.asString().isBlank()
+                ? value.asString()
                 : null;
     }
 }
