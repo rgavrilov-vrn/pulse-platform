@@ -136,7 +136,8 @@ logging:
     # это утечка SQL-параметров (включая password_hash при логине).
     # Включаются только в application-local.yml.
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%thread] %logger{36} - %msg%n"
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} --- [%t] %clr(%logger{36}){cyan} : %m%n%wEx"
+#  console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%thread] %logger{36} - %msg%n"
   charset:
     console: UTF-8
     file: UTF-8

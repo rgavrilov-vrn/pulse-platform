@@ -24,14 +24,19 @@ public class AppPrincipalMapper {
 
         for (UserRoleEntity userRole : user.getRoles()) {
             RoleEntity role = userRole.getRole();
+            // FIX #89 (preventive): null-safe на случай повреждённых данных.
+            if (role == null) {
+                log.warn("Dangling user_role without role for user={}", user.getLogin());
+                continue;
+            }
             String roleCode = role.getCode();
-
             authorities.add(new SimpleGrantedAuthority(
                     "ROLE_" + roleCode.toUpperCase(Locale.ROOT)));
 
+            if (role.getPermissions() == null) continue;
             for (RolePermissionEntity rp : role.getPermissions()) {
                 if (rp.getPermission() == null) {
-                    log.warn("Role '{}' has dangling role_permission record without permission — skipped",
+                    log.warn("Role '{}' has dangling role_permission without permission — skipped",
                             roleCode);
                     continue;
                 }
@@ -39,10 +44,12 @@ public class AppPrincipalMapper {
             }
         }
 
+        // FIX #20: передаём актуальный флаг is_active.
         return new AppPrincipal(
                 user.getId(),
                 user.getLogin(),
                 user.getPasswordHash(),
-                new ArrayList<>(authorities));
+                new ArrayList<>(authorities),
+                user.isActive());
     }
 }

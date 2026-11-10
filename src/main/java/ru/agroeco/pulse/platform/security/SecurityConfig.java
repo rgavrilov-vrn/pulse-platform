@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -54,18 +55,26 @@ public class SecurityConfig {
                                 "/actuator/health", "/actuator/health/**",
                                 "/actuator/info"
                         ).permitAll()
-                        .requestMatchers("/actuator/prometheus", "/actuator/metrics/**")
-                        .hasAuthority("system:admin")
+                        // FIX #41: Prometheus-скрейпер не умеет JWT из auth.users.
+                        // Требование system:admin ломало мониторинг.
+                        // Ограничение доступа — через management.server.port (отдельный
+                        // порт, недоступный извне) и/или сетевой ACL.
+                        // ВНИМАНИЕ: если management.server.port == server.port и порт
+                        // открыт наружу — метрики публичны. Проверить в deployment.
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/trassir/ingest"
-                        )
-                        .hasAuthority("trassir:ingest")
+                        ).hasAuthority("trassir:ingest")
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/v1/trassir/admin/data"
-                        )
-                        .hasAuthority("trassir:admin")
+                        ).hasAuthority("trassir:admin")
+                        // FIX #26 (preventive): GET /admin/audit требует trassir:admin.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/trassir/admin/**"
+                        ).hasAuthority("trassir:admin")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->
@@ -78,16 +87,30 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * FIX #43: JwtAuthenticationFilter помечен @Component, поэтому Boot
+     * автоматически регистрирует его как servlet-фильтр — параллельно с
+     * addFilterBefore() в SecurityFilterChain. Это даёт двойное выполнение
+     * вне SecurityContextHolderFilter. Отключаем auto-registration;
+     * фильтр остаётся активным только внутри security-chain.
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JwtAuthenticationFilter filter) {
+        var registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-
         configuration.setAllowedOrigins(corsProperties.getAllowedOrigins());
         configuration.setAllowedMethods(List.of(
                 "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        // FIX #98 (preventive): X-Requested-With и Origin — лишние в allow-list.
         configuration.setAllowedHeaders(List.of(
-                "Authorization", "Content-Type", "Accept",
-                "X-Correlation-Id", "X-Requested-With", "Origin"));
+                "Authorization", "Content-Type", "Accept", "X-Correlation-Id"));
         configuration.setExposedHeaders(List.of("X-Correlation-Id"));
         configuration.setAllowCredentials(false);
 

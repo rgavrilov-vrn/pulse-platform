@@ -21,9 +21,11 @@ import java.io.IOException;
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    // FIX #47: case-insensitive Bearer (RFC 6750).
+    private static final String BEARER_PREFIX = "Bearer ";
+    private static final int BEARER_PREFIX_LEN = BEARER_PREFIX.length();
+
     private final JwtService jwtService;
-    // ТОЛЬКО интерфейс Spring Security.
-    // platform не должен знать про auth.application.AppUserDetailsService.
     private final UserDetailsService userDetailsService;
 
     @Override
@@ -34,13 +36,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         log.debug("Incoming request: {} {}", request.getMethod(), request.getRequestURI());
 
         String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ")) {
+        if (header != null && header.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX_LEN)) {
+            String token = header.substring(BEARER_PREFIX_LEN);
             try {
-                String username = jwtService.extractUsername(header.substring(7));
+                String username = jwtService.extractUsername(token);
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UserDetails user = userDetailsService.loadUserByUsername(username);
-                    if (jwtService.isValid(header.substring(7), user)) {
-                        var auth = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+                    // FIX #20: явная проверка isEnabled / isAccountNonLocked —
+                    // не полагаемся только на фильтр в AppUserDetailsService.
+                    if (user.isEnabled()
+                            && user.isAccountNonLocked()
+                            && user.isAccountNonExpired()
+                            && user.isCredentialsNonExpired()
+                            && jwtService.isValid(token, user)) {
+                        var auth = new UsernamePasswordAuthenticationToken(
+                                user, null, user.getAuthorities());
                         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(auth);
                     }

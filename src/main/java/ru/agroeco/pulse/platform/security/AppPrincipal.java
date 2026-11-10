@@ -9,28 +9,29 @@ import java.util.UUID;
 /**
  * Principal пользователя.
  *
- * <p>Живёт в {@code platform.security}, чтобы {@code auth}, {@code audit},
- * {@code incident} и другие модули могли использовать его, не завися друг
- * от друга. Раньше был в {@code auth.security} и создавал цикл
- * {@code platform → auth} и {@code audit → auth}.</p>
+ * FIX #20: добавлено поле {@code enabled}, отражающее auth.users.is_active.
+ * Ранее {@code isEnabled()} всегда возвращал {@code true}, из-за чего
+ * деактивированный пользователь с неистёкшим JWT продолжал работать.
+ * Отдельного поля {@code locked} в схеме нет — используем тот же флаг.
  */
 public record AppPrincipal(
         UUID id,
         String username,
         String passwordHash,
-        List<GrantedAuthority> authorities
+        List<GrantedAuthority> authorities,
+        boolean enabled
 ) implements UserDetails {
 
     @Override public String getUsername() { return username; }
     @Override public String getPassword() { return passwordHash; }
     @Override public List<GrantedAuthority> getAuthorities() { return authorities; }
-    @Override public boolean isEnabled() { return true; }
+    @Override public boolean isEnabled() { return enabled; }
     @Override public boolean isAccountNonExpired() { return true; }
-    @Override public boolean isAccountNonLocked() { return true; }
+    @Override public boolean isAccountNonLocked() { return enabled; }
     @Override public boolean isCredentialsNonExpired() { return true; }
 
     @Override
     public String toString() {
-        return "AppPrincipal[id=" + id + ", username=" + username + "]";
+        return "AppPrincipal[id=" + id + ", username=" + username + ", enabled=" + enabled + "]";
     }
 }
