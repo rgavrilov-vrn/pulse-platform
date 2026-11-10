@@ -5,12 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
 import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -18,41 +17,35 @@ import java.util.List;
 public class TrassirSnapshotRetryWorker {
 
     private final TrassirSnapshotRepository snapshotRepository;
+    private final TrassirSnapshotRetryOne retryOne;
     private final TrassirMetrics metrics;
 
-    @Value("${pulse.trassir.snapshot-retry.max-attempts:5}")
-    private int maxAttempts;
+    @Value("${pulse.trassir.snapshot-retry.batch-size:50}")
+    private int batchSize;
 
-    @Value("${pulse.trassir.snapshot-retry.base-delay-seconds:60}")
-    private long baseDelaySeconds;
-
+    /**
+     * FIX #29: реальный retry через {@link TrassirSnapshotRetryOne#retry(UUID)}.
+     * FIX #76, #77: каждый snapshot обрабатывается в своей REQUIRES_NEW
+     * транзакции с SKIP LOCKED — параллельные инстансы не мешают,
+     * падение одного не откатывает остальные.
+     *
+     * <p>Метод БЕЗ {@code @Transactional}: read candidate-ids не требует
+     * транзакции, а per-snapshot работа изолирована в retryOne.</p>
+     */
     @Scheduled(fixedDelayString = "${pulse.trassir.snapshot-retry.interval-ms:60000}")
-    @Transactional
     public void retryFailedSnapshots() {
+        // Метрика pending — отдельный быстрый count, вне batch-выборки.
         long pending = snapshotRepository.countByStatus("PENDING");
         metrics.recordPendingSnapshots(pending);
 
-        List<TrassirSnapshot> snapshots = snapshotRepository
-                .findTop50ByStatusAndNextRetryAtBeforeOrderByNextRetryAtAsc(
-                        "FAILED",
-                        Instant.now()
-                );
+        List<UUID> candidates = snapshotRepository
+                .findCandidateIdsForRetry(Instant.now(), batchSize);
 
-        for (TrassirSnapshot snapshot : snapshots) {
-            metrics.incrementSnapshotRetried();
-
-            int nextAttempt = snapshot.getRetryCount() + 1;
-            snapshot.setRetryCount(nextAttempt);
-
-            if (nextAttempt >= maxAttempts) {
-                snapshotRepository.markDeadLetter(snapshot.getId());
-                metrics.incrementSnapshotDeadLetter();
-            } else {
-                snapshotRepository.markFailed(
-                        snapshot.getId(),
-                        snapshot.getLastError(),
-                        Instant.now().plusSeconds(baseDelaySeconds * (1L << nextAttempt))
-                );
+        for (UUID id : candidates) {
+            try {
+                retryOne.retry(id);
+            } catch (Exception e) {
+                log.warn("Snapshot retry threw for id={}", id, e);
             }
         }
     }

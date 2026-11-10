@@ -54,6 +54,22 @@ server:
   servlet:
     context-path: /pulse-platform
 
+pulse:
+  trassir:
+    ingest:
+      max-body-bytes: 10485760   # FIX #82: 10 МБ
+    retry:
+      interval-ms: 30000
+      batch-size: 50
+      max-attempts: 5
+      base-delay-seconds: 30
+      stale-pending-minutes: 5
+    snapshot-retry:
+      interval-ms: 60000
+      batch-size: 50
+      max-attempts: 5
+      base-delay-seconds: 60
+
 # FIX #36: spring.main.web-application-type: servlet — избыточно
 # (deduce и так вернёт SERVLET при наличии spring-boot-starter-webmvc).
 
@@ -65,6 +81,12 @@ app:
       incident-events: pulse.incident.events
       # notification-requests / notification-status удалены:
       # модуля уведомлений в коде нет (FIX #13).
+    consumer:
+      group-id: pulse-incident      # FIX #56: используется в @KafkaListener
+
+  incident:
+    # FIX #57: UUID __system__ из миграций. Переопределяемо для multi-tenant.
+    system-user-id: "00000000-0000-0000-0000-000000000001"
 
   outbox:
     relay-enabled: true

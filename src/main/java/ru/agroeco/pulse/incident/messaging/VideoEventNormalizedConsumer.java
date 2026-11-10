@@ -22,10 +22,16 @@ public class VideoEventNormalizedConsumer {
     private final ProcessedEventPort processedEventPort;
     private final ObjectMapper objectMapper;
 
+    /**
+     * FIX #56: topic/groupId из конфига.
+     * FIX #55: при RuntimeException Spring Kafka через DefaultErrorHandler
+     * (см. KafkaConsumerConfig) отправит сообщение в `<topic>.dlt` после
+     * исчерпания ретраев. Раньше exception глотался и сообщение терялось.
+     */
     @KafkaListener(
-        topics = "pulse.videoserver.events",
-        groupId = "pulse-incident",
-        containerFactory = "kafkaListenerContainerFactory"
+            topics = "${app.kafka.topic.video-events}",
+            groupId = "${app.kafka.consumer.group-id:pulse-incident}",
+            containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
     public void onVideoEventNormalized(String payload) {
@@ -33,15 +39,25 @@ public class VideoEventNormalizedConsumer {
         try {
             event = objectMapper.readValue(payload, VideoEventNormalized.class);
         } catch (JacksonException exception) {
-            log.error("Failed to deserialize VideoEventNormalized: {}", payload, exception);
+            // Не пробрасываем: битое сообщение — не retryable.
+            log.error("Cannot deserialize VideoEventNormalized, dropping message. payload.length={}",
+                    payload.length());
             return;
         }
 
+        // tryMarkProcessed должен работать в той же транзакции (не REQUIRES_NEW),
+        // иначе маркер «обработано» переживёт откат handle().
         if (!processedEventPort.tryMarkProcessed(CONSUMER_NAME, event.eventId())) {
             log.info("Skipping already processed video event {}", event.eventId());
             return;
         }
 
-        createIncident.handle(event);
+        // FIX #58: Optional.empty() — дубликат, уже создан (constraint hit).
+        // FIX #55: RuntimeException → Spring Kafka → DLT.
+        createIncident.handle(event).ifPresentOrElse(
+                created -> log.debug("Incident {} created from event {}",
+                        created.number(), event.eventId()),
+                () -> log.info("Duplicate video event {} — incident already exists",
+                        event.eventId()));
     }
 }

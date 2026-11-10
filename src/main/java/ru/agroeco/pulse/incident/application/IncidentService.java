@@ -30,7 +30,6 @@ public class IncidentService {
     private static final String DEFAULT_SOURCE = "manual";
     private final IncidentRepository incidents;
     private final SourceRepository sources;
-    private final CommentRepository comments;
     private final StatusHistoryRepository statusHistory;
     private final StatusTransitionRepository transitions;
     private final EventDispatcher events;
@@ -41,6 +40,8 @@ public class IncidentService {
     private final IncidentSummaryEnricher summaryEnricher;
     private final IncidentCardFields cardFields;
     private final IncidentCategoryChange categoryChange;
+    private final CommentService commentService;   // FIX #68
+    private final IncidentSummaryEnricher summaryEnricher;   // уже было
 
     @Transactional
     public IncidentDetails create(CreateIncidentRequest req, UUID actorId) {
@@ -115,9 +116,6 @@ public class IncidentService {
         if (from == to) {
             throw new BusinessRuleException("Incident already has status " + to);
         }
-        if (from.isTerminal()) {
-            throw new BusinessRuleException("Status " + from + " is terminal; no transitions allowed");
-        }
         var tid = new StatusTransitionId(from, to);
         if (!transitions.existsById(tid)) {
             throw new BusinessRuleException("Transition " + from + " → " + to + " is not allowed");
@@ -152,20 +150,10 @@ public class IncidentService {
         return toDetails(incident);
     }
 
+    // Публичный API для контроллера (IncidentController.addComment)
     @Transactional
     public CommentView addComment(UUID incidentId, AddCommentRequest req, UUID actorId) {
-        if (!incidents.existsById(incidentId)) {
-            throw new NotFoundException("Incident not found: " + incidentId);
-        }
-        CommentEntity c = CommentEntity.builder()
-                .incidentId(incidentId).authorId(actorId).commentType(req.commentType())
-                .body(req.body().trim()).deleted(false).build();
-        comments.saveAndFlush(c);
-        events.dispatch(IncidentCommentAdded.builder()
-                .incidentId(incidentId).commentId(c.getId()).authorId(actorId)
-                .commentType(c.getCommentType())
-                .occurredAt(c.getCreatedAt() != null ? c.getCreatedAt() : Instant.now()).build());
-        return toCommentView(c);
+        return commentService.add(incidentId, req, actorId);
     }
 
     private IncidentKind deriveKind(IncidentEntity incident) {
@@ -184,9 +172,11 @@ public class IncidentService {
     private IncidentSummary toSummary(IncidentEntity i) {
         return new IncidentSummary(
                 i.getId(), i.getNumber(), i.getSource(), i.getCreationMode(),
-                i.getStatus(), i.getSeverity(), deriveKind(i), i.getEventTime(),
-                i.getCreatedAt(), i.getUpdatedAt(), i.getAssignedTo(), i.getComment(),
-                i.getCategoryId(), categoryName(i));
+                i.getStatus(), i.getSeverity(),
+                null,                                  // kind заполнит enricher
+                i.getEventTime(), i.getCreatedAt(), i.getUpdatedAt(),
+                i.getAssignedTo(), i.getComment(),
+                i.getCategoryId(), null);              // categoryName заполнит enricher
     }
 
     private IncidentDetails toDetails(IncidentEntity i) {
@@ -219,37 +209,64 @@ public class IncidentService {
     public IncidentDetails update(UUID id, UpdateIncidentRequest req, UUID actorId) {
         IncidentEntity incident = incidents.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
-        if (incident.getStatus().isTerminal()) {
+
+        // FIX #54: контентные правки (category, eventTime, checkpoint) — только
+        // в статусах allowsContentEdit(). Комментарий — можно в любом, кроме ARCHIVED.
+        boolean editingContent = req.categoryId() != null
+                || req.eventTime() != null
+                || (req.checkpoint() != null && !req.checkpoint().isBlank());
+        if (editingContent && !incident.getStatus().allowsContentEdit()) {
             throw new BusinessRuleException(
-                    "Incident " + incident.getStatus() + " is terminal; update not allowed");
+                    "Редактирование содержимого запрещено в статусе " + incident.getStatus());
         }
+        if (incident.getStatus() == IncidentStatus.ARCHIVED) {
+            throw new BusinessRuleException("Incident is archived; update not allowed");
+        }
+
         Map<String, Object> oldData = new HashMap<>();
         oldData.put("categoryId", incident.getCategoryId().toString());
         oldData.put("eventTime", incident.getEventTime().toString());
         if (incident.getComment() != null) oldData.put("comment", incident.getComment());
         if (incident.getSeverity() != null) oldData.put("severity", incident.getSeverity().name());
-        oldData.put("metadata", incident.getMetadata()==null ? Map.of() : new HashMap<>(incident.getMetadata()));
-        boolean changingCategory=req.categoryId()!=null && !req.categoryId().equals(incident.getCategoryId());
-        if(changingCategory) categoryChange.apply(incident,req,actorId);
-        cardFields.apply(incident,req);
+        oldData.put("metadata", incident.getMetadata() == null
+                ? Map.of() : new HashMap<>(incident.getMetadata()));
+
+        boolean changingCategory = req.categoryId() != null
+                && !req.categoryId().equals(incident.getCategoryId());
+        if (changingCategory) categoryChange.apply(incident, req, actorId);
+        cardFields.apply(incident, req);
         if (req.eventTime() != null) incident.setEventTime(req.eventTime());
         if (req.comment() != null) incident.setComment(req.comment().isBlank() ? null : req.comment());
+
         if (req.checkpoint() != null && !req.checkpoint().isBlank()) {
-            var link=addCheckpointLink(incident, req.checkpoint(), actorId);
-            if(changingCategory) events.dispatch(IncidentCheckpointAdded.builder()
-                    .incidentId(id).linkId(link.getId()).checklistItemId(link.getChecklistItemId())
-                    .checklistItemCode(req.checkpoint()).kind(deriveKind(incident))
-                    .actorId(actorId).occurredAt(Instant.now()).build());
+            var link = addCheckpointLink(incident, req.checkpoint(), actorId);
+            // FIX #49: диспатчим всегда, а не только при смене категории.
+            events.dispatch(IncidentCheckpointAdded.builder()
+                    .incidentId(id)
+                    .linkId(link.getId())
+                    .checklistItemId(link.getChecklistItemId())
+                    .checklistItemCode(req.checkpoint())
+                    .kind(deriveKind(incident))
+                    .actorId(actorId)
+                    .occurredAt(Instant.now())
+                    .build());
         }
+
         incident.setUpdatedBy(actorId);
         incidents.saveAndFlush(incident);
-        if (req.comment()!=null && !req.comment().isBlank() && !java.util.Objects.equals(oldData.get("comment"),req.comment())) {
-            addComment(incident.getId(), new AddCommentRequest(CommentType.OPERATOR, req.comment()), actorId);
+
+        if (req.comment() != null && !req.comment().isBlank()
+                && !java.util.Objects.equals(oldData.get("comment"), req.comment())) {
+            // FIX #68: через отдельный бин — транзакция проксируется.
+            commentService.add(incident.getId(),
+                    new AddCommentRequest(CommentType.OPERATOR, req.comment()), actorId);
         }
+
         events.dispatch(IncidentUpdated.builder()
-                .incidentId(id).kind(deriveKind(incident)).eventTime(incident.getEventTime())
-                .comment(incident.getComment()).oldData(oldData).actorId(actorId)
-                .severity(incident.getSeverity()).metadata(new HashMap<>(incident.getMetadata()))
+                .incidentId(id).kind(deriveKind(incident))
+                .eventTime(incident.getEventTime()).comment(incident.getComment())
+                .oldData(oldData).actorId(actorId).severity(incident.getSeverity())
+                .metadata(new HashMap<>(incident.getMetadata()))
                 .occurredAt(Instant.now()).build());
         return toDetails(incident);
     }
@@ -259,9 +276,10 @@ public class IncidentService {
             UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
         IncidentEntity incident = incidents.findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
-        if (incident.getStatus().isTerminal()) {
+        // FIX #54: заменено isTerminal() → allowsContentEdit()
+        if (!incident.getStatus().allowsContentEdit()) {
             throw new BusinessRuleException(
-                    "Incident " + incident.getStatus() + " is terminal; cannot add checkpoints");
+                    "Нельзя добавлять чек-поинты в статусе " + incident.getStatus());
         }
         IncidentChecklistItemEntity link = addCheckpointLink(incident, checklistItemCode, comment, actorId);
         incidents.saveAndFlush(incident);

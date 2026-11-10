@@ -4,44 +4,35 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Getter
+@Setter
 @Entity
 @Table(name = "context_refs", schema = "incident")
 @IdClass(IncidentContextRefId.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IncidentContextRef {
 
-    @Id
-    @Column(name = "incident_id", nullable = false)
-    private UUID incidentId;
+    @Id @Column(name = "incident_id", nullable = false)               private UUID incidentId;
+    @Id @Column(name = "domain",      nullable = false, length = 64)  private String domain;
+    @Id @Column(name = "entity_type", nullable = false, length = 64)  private String entityType;
+    @Id @Column(name = "entity_id",   nullable = false)               private UUID entityId;
 
-    @Id
-    @Column(name = "domain", nullable = false, length = 64)
-    private String domain;
+    @Column(name = "is_primary", nullable = false)                    private boolean isPrimary;
+    @Column(name = "entity_name_snapshot", length = 255)              private String entityNameSnapshot;
 
-    @Id
-    @Column(name = "entity_type", nullable = false, length = 64)
-    private String entityType;
-
-    @Id
-    @Column(name = "entity_id", nullable = false)
-    private UUID entityId;
-
-    @Column(name = "is_primary", nullable = false)
-    private boolean isPrimary;
-
-    @Column(name = "entity_name_snapshot", length = 255)
-    private String entityNameSnapshot;
-
+    /** FIX #52: Map вместо String — единообразие с IncidentEntity.metadata. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
-    private String metadata = "{}";
+    private Map<String, Object> metadata = new HashMap<>();
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
@@ -54,5 +45,10 @@ public class IncidentContextRef {
         this.entityId = entityId;
         this.isPrimary = isPrimary;
         this.entityNameSnapshot = entityNameSnapshot;
+    }
+
+    @PrePersist
+    void prePersist() {
+        if (metadata == null) metadata = new HashMap<>();
     }
 }

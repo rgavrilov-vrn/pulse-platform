@@ -109,6 +109,10 @@ public class IncidentEntity {
     @Column(nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> metadata;
 
+    // в класс IncidentEntity — между categoryId и eventTime:
+    @Column(name = "source_event_id")
+    private UUID sourceEventId;
+
     @PrePersist
     void prePersist() {
         if (id == null) id = UUID.randomUUID();

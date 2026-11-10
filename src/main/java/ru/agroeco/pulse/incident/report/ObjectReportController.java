@@ -132,7 +132,10 @@ public class ObjectReportController {
         return new Selection(w.toString(),p,order);
     }
     @GetMapping
-    public Page list(@ModelAttribute Filter filter,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="25") int size) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)  // FIX #60
+    public Page list(@ModelAttribute Filter filter,
+                     @RequestParam(defaultValue = "0") int page,
+                     @RequestParam(defaultValue = "25") int size) {
         if(page<0 || size<1 || size>100)bad("Размер страницы 1–100; номер неотрицательный");
         var s=selection(filter);
         Long total=jdbc.queryForObject(BASE+" SELECT count(*) FROM report_base i"+s.where(),s.params(),Long.class);
@@ -146,8 +149,9 @@ public class ObjectReportController {
         return new Page(rows,page,size,count,(count+size-1)/size);
     }
     @GetMapping("/options")
-    public Options options(){
-        return new Options(options("SELECT id,name,NULL::uuid AS parent_id FROM ref.objects ORDER BY name,id"),
+    @Transactional(readOnly = true)   // FIX #60: READ_COMMITTED достаточно — 4 независимых SELECT
+    public Options options() {
+       return new Options(options("SELECT id,name,NULL::uuid AS parent_id FROM ref.objects ORDER BY name,id"),
             options("SELECT id,name,group_id AS parent_id FROM incident.violation_categories ORDER BY sort_order,name,id"),
             options("SELECT id,name,category_id AS parent_id FROM incident.checklist_items ORDER BY sort_order,name,id"),
             options("SELECT u.id,COALESCE(u.display_name,u.login::text) AS name,NULL::uuid AS parent_id FROM auth.users u WHERE EXISTS(SELECT 1 FROM incident.incidents i WHERE i.created_by=u.id) ORDER BY name,id"));

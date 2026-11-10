@@ -6,6 +6,7 @@ import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -26,11 +27,16 @@ public record IncidentCheckpointAdded(
     @Override public String entityTable() { return "incident_checklist_items"; }
     @Override public Instant occurredAt() { return occurredAt; }
     @Override public UUID actorId() { return actorId; }
-    @Override public Object newDataSnapshot() {
-        return Map.of(
-                "linkId", linkId.toString(),
-                "checklistItemId", checklistItemId.toString(),
-                "checklistItemCode", checklistItemCode,
-                "kind", kind.name());
+
+    @Override
+    public Object newDataSnapshot() {
+        // FIX #50: раньше Map.of(...) с kind.name() — NPE при kind==null
+        // (deriveKind может вернуть null, если категория/группа удалены).
+        Map<String, Object> data = new HashMap<>();
+        data.put("linkId", linkId.toString());
+        data.put("checklistItemId", checklistItemId.toString());
+        data.put("checklistItemCode", checklistItemCode);
+        data.put("kind", kind != null ? kind.name() : null);
+        return data;
     }
 }

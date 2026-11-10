@@ -91,7 +91,10 @@ public class IncidentMaterialService {
         return new MaterialView(id, rs.getString("file_name"), rs.getString("mime_type"),
                 rs.getLong("size_bytes"), rs.getString("material_type"), rs.getString("role"),
                 rs.getTimestamp("uploaded_at").toInstant(),
-                "/api/v1/incidents/" + incidentId + "/materials/" + id + "/download");
+                // FIX #65: без leading '/', чтобы клиент сам подставил context-path
+                // (/pulse-platform). Раньше при context-path=/pulse-platform
+                // URL в ответе вёл на 404.
+                "api/v1/incidents/" + incidentId + "/materials/" + id + "/download");
     }
 
     public List<MaterialView> list(UUID incidentId) {
@@ -170,7 +173,7 @@ public class IncidentMaterialService {
                         .build());
                 log.info("Material attached: incidentId={}, materialId={}, actorId={}, bytes={}, sha256={}", incidentId, assetId, actorId, bytes, sha);
                 return new MaterialView(assetId, finalName, mime, bytes, kind, "ADDITIONAL_EVIDENCE", uploadedAt,
-                        "/api/v1/incidents/" + incidentId + "/materials/" + assetId + "/download");
+                        "api/v1/incidents/" + incidentId + "/materials/" + assetId + "/download");
             });
         } catch (RuntimeException exception) {
             if (!registered.get()) cleanup(target);

@@ -5,14 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.agroeco.pulse.trassir.domain.TrassirEvent;
 import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -20,90 +21,30 @@ import java.util.List;
 public class TrassirEventRetryWorker {
 
     private final TrassirEventRepository eventRepository;
-    private final TrassirEventRouter router;
+    private final TrassirEventProcessor eventProcessor;
     private final TrassirMetrics metrics;
-    private final ObjectMapper objectMapper;
 
-    @Value("${pulse.trassir.retry.max-attempts:5}")
-    private int maxAttempts;
+    @Value("${pulse.trassir.retry.stale-pending-minutes:5}")
+    private long stalePendingMinutes;
 
-    @Value("${pulse.trassir.retry.base-delay-seconds:30}")
-    private long baseDelaySeconds;
+    @Value("${pulse.trassir.retry.batch-size:50}")
+    private int batchSize;
 
     @Scheduled(fixedDelayString = "${pulse.trassir.retry.interval-ms:30000}")
-    @Transactional
-    public void retryFailedEvents() {
-        List<TrassirEvent> events = eventRepository
-                .findTop50ByStatusAndNextRetryAtBeforeOrderByNextRetryAtAsc(
-                        "FAILED",
-                        Instant.now()
-                );
+    public void sweep() {
+        Instant now = Instant.now();
+        Instant staleCutoff = now.minusSeconds(stalePendingMinutes * 60);
 
-        for (TrassirEvent event : events) {
-            metrics.incrementEventRetried(event.getEventType());
+        List<UUID> candidates = eventRepository.findCandidateIdsForRetry(
+                now, staleCutoff, batchSize);
 
+        for (UUID id : candidates) {
             try {
-                EventProcessingResult result = router.route(toContext(event));
-
-                if (result.successful()) {
-                    event.setStatus("PROCESSED");
-                    event.setProcessingError(null);
-                    event.setLastError(null);
-                    event.setNextRetryAt(null);
-                    metrics.incrementEventProcessed(event.getEventType());
-                } else {
-                    markRetry(event, result.error());
-                }
+                // REQUIRES_NEW внутри, со SKIP LOCKED.
+                eventProcessor.processById(id);
             } catch (Exception e) {
-                log.warn("Retry failed for event {}: {}", event.getId(), e.getMessage(), e);
-                markRetry(event, e.getClass().getSimpleName() + ": " + e.getMessage());
+                log.warn("Event retry threw for id={}: {}", id, e.getMessage());
             }
-
-            eventRepository.save(event);
-        }
-    }
-
-    private TrassirEventContext toContext(TrassirEvent event) {
-        try {
-            JsonNode source = objectMapper.readTree(event.getSource());
-            JsonNode data = objectMapper.readTree(event.getData());
-
-            ParsedTrassirEnvelope.Event parsed = new ParsedTrassirEnvelope.Event(
-                    event.getEventId(),
-                    event.getEventType(),
-                    event.getEventVersion(),
-                    event.getOccurredAt(),
-                    event.getObservedAt(),
-                    source,
-                    data
-            );
-
-            return new TrassirEventContext(
-                    event.getServerId(),
-                    null,
-                    Instant.now(),
-                    parsed
-            );
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot reconstruct event context", e);
-        }
-    }
-
-    private void markRetry(TrassirEvent event, String error) {
-        int nextAttempt = event.getRetryCount() + 1;
-        event.setRetryCount(nextAttempt);
-        event.setProcessingError(error);
-        event.setLastError(error);
-
-        if (nextAttempt >= maxAttempts) {
-            event.setStatus("DEAD_LETTER");
-            event.setNextRetryAt(null);
-            metrics.incrementEventDeadLetter(event.getEventType());
-        } else {
-            event.setStatus("FAILED");
-            event.setNextRetryAt(
-                    Instant.now().plusSeconds(baseDelaySeconds * (1L << nextAttempt))
-            );
         }
     }
 }

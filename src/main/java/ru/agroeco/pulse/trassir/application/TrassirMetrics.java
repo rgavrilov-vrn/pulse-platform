@@ -29,12 +29,15 @@ public class TrassirMetrics {
         registry.counter("trassir_events_processed_total", "event_type", eventType).increment();
     }
 
-    public void incrementEventFailed(String eventType, String error) {
-        registry.counter(
-                "trassir_events_failed_total",
+    /**
+     * FIX #80: bounded error-тег. Раньше передавалось полное сообщение
+     * исключения → тысячи уникальных time-series (кардинальный взрыв).
+     * Классификация выполняется в вызывающем коде (TrassirEventProcessor.classify).
+     */
+    public void incrementEventFailed(String eventType, String errorCategory) {
+        registry.counter("trassir_events_failed_total",
                 "event_type", eventType,
-                "error", error
-        ).increment();
+                "error", errorCategory).increment();
     }
 
     public void incrementEventRetried(String eventType) {
@@ -45,11 +48,16 @@ public class TrassirMetrics {
         registry.counter("trassir_events_dead_letter_total", "event_type", eventType).increment();
     }
 
+    /** FIX #81: событие неизвестного типа — раньше молча помечалось PROCESSED. */
+    public void incrementEventUnknown(String eventType) {
+        // eventType в теге — потенциально unbounded, но список типов
+        // контролируется агентом и редко меняется.
+        registry.counter("trassir_events_unknown_total", "event_type", eventType).increment();
+    }
+
     public void recordEventProcessing(String eventType, long durationNanos) {
-        registry.timer(
-                "trassir_event_processing_duration_seconds",
-                "event_type", eventType
-        ).record(durationNanos, TimeUnit.NANOSECONDS);
+        registry.timer("trassir_event_processing_duration_seconds",
+                "event_type", eventType).record(durationNanos, TimeUnit.NANOSECONDS);
     }
 
     public void recordPendingSnapshots(long count) {

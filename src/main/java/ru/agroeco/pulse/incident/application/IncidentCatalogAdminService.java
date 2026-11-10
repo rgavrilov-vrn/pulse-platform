@@ -24,11 +24,15 @@ public class IncidentCatalogAdminService {
     public record CategoryInput(@NotNull UUID groupId,
             @NotBlank @Size(max=100) String code,@NotBlank @Size(max=255) String name,
             @Size(max=10000) String description,@Min(0) int sortOrder) {}
-    public record PointInput(@NotNull UUID categoryId,
-            @NotBlank @Size(max=100) String code,@NotBlank @Size(max=500) String name,
-            @Size(max=10000) String description,@Size(max=10000) String commentTemplate,
-            @NotNull IncidentSeverity defaultSeverity,@Min(0) int sortOrder,
-            boolean requiresImage,boolean requiresComment,boolean requiresVideo) {}
+    public record PointInput(
+            @NotNull UUID categoryId,
+            @NotBlank @Size(max = 100) String code,
+            @NotBlank @Size(max = 500) String name,
+            @Size(max = 10000) String description,
+            @Size(max = 10000) String commentTemplate,
+            @NotNull IncidentSeverity defaultSeverity,   // было String
+            @Min(0) int sortOrder,
+            boolean requiresImage, boolean requiresComment, boolean requiresVideo) {}
 
     public List<ViolationCategoryEntity> categories(UUID groupId,boolean includeDeleted) {
         var q=em.createQuery("SELECT c FROM ViolationCategoryEntity c WHERE 1=1"
@@ -96,7 +100,7 @@ public class IncidentCatalogAdminService {
     }
     private static void apply(ChecklistItemEntity p,PointInput input) {
         p.setName(input.name().trim());p.setDescription(input.description());p.setCommentTemplate(input.commentTemplate());
-        p.setDefaultSeverity(input.defaultSeverity().name());p.setSortOrder(input.sortOrder());
+        p.setDefaultSeverity(input.defaultSeverity());p.setSortOrder(input.sortOrder());
         p.setRequiresImage(input.requiresImage());p.setRequiresComment(input.requiresComment());p.setRequiresVideo(input.requiresVideo());
     }
     @Transactional
