@@ -2,6 +2,8 @@ package ru.agroeco.pulse.platform.trassir.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -29,6 +31,7 @@ public class AdminAuditLog {
     @Column(name = "target", nullable = false)
     private String target;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "details", columnDefinition = "jsonb")
     private String details;
 
