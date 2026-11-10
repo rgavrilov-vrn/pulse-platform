@@ -16,4 +16,8 @@ public interface TrassirIngestRawRepository extends JpaRepository<TrassirIngestR
     @Modifying
     @Query("delete from TrassirIngestRaw raw where raw.createdAt < :cutoff")
     int deleteOlderThan(@Param("cutoff") Instant cutoff);
+
+    @Modifying
+    @Query("delete from TrassirIngestRaw raw")
+    int deleteAllRaw();
 }

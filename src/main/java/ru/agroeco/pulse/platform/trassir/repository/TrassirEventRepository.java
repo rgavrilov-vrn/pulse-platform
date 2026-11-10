@@ -20,4 +20,8 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
     @Modifying
     @Query("delete from TrassirEvent event where event.createdAt < :cutoff and event.status in ('PROCESSED', 'DEAD_LETTER')")
     int deleteFinishedOlderThan(@Param("cutoff") Instant cutoff);
+
+    @Modifying
+    @Query("delete from TrassirEvent event")
+    int deleteAllEvents();
 }
