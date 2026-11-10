@@ -21,6 +21,7 @@ public class TrassirEventRetryWorker {
 
     private final TrassirEventRepository eventRepository;
     private final TrassirEventRouter router;
+    private final TrassirMetrics metrics;
     private final ObjectMapper objectMapper;
 
     @Value("${pulse.trassir.retry.max-attempts:5}")
@@ -39,6 +40,8 @@ public class TrassirEventRetryWorker {
                 );
 
         for (TrassirEvent event : events) {
+            metrics.incrementEventRetried(event.getEventType());
+
             try {
                 EventProcessingResult result = router.route(toContext(event));
 
@@ -47,6 +50,7 @@ public class TrassirEventRetryWorker {
                     event.setProcessingError(null);
                     event.setLastError(null);
                     event.setNextRetryAt(null);
+                    metrics.incrementEventProcessed(event.getEventType());
                 } else {
                     markRetry(event, result.error());
                 }
@@ -94,6 +98,7 @@ public class TrassirEventRetryWorker {
         if (nextAttempt >= maxAttempts) {
             event.setStatus("DEAD_LETTER");
             event.setNextRetryAt(null);
+            metrics.incrementEventDeadLetter(event.getEventType());
         } else {
             event.setStatus("FAILED");
             event.setNextRetryAt(

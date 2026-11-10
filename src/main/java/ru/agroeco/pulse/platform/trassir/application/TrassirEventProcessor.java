@@ -23,6 +23,7 @@ public class TrassirEventProcessor {
 
     private final TrassirEventRepository eventRepository;
     private final TrassirEventRouter router;
+    private final TrassirMetrics metrics;
     private final ObjectMapper objectMapper;
 
     @Async
@@ -43,6 +44,8 @@ public class TrassirEventProcessor {
         if (event == null || "PROCESSED".equals(event.getStatus())) {
             return;
         }
+
+        long startedAt = System.nanoTime();
 
         try {
             JsonNode source = objectMapper.readTree(event.getSource());
@@ -72,21 +75,26 @@ public class TrassirEventProcessor {
                 event.setProcessingError(null);
                 event.setLastError(null);
                 event.setNextRetryAt(null);
+                metrics.incrementEventProcessed(event.getEventType());
             } else {
                 event.setStatus("FAILED");
                 event.setProcessingError(result.error());
                 event.setLastError(result.error());
                 event.setRetryCount(0);
                 event.setNextRetryAt(Instant.now());
+                metrics.incrementEventFailed(event.getEventType(), result.error());
             }
         } catch (Exception e) {
+            String error = e.getClass().getSimpleName() + ": " + e.getMessage();
             event.setStatus("FAILED");
-            event.setProcessingError(e.getClass().getSimpleName() + ": " + e.getMessage());
-            event.setLastError(e.getClass().getSimpleName() + ": " + e.getMessage());
+            event.setProcessingError(error);
+            event.setLastError(error);
             event.setRetryCount(0);
             event.setNextRetryAt(Instant.now());
+            metrics.incrementEventFailed(event.getEventType(), error);
         }
 
+        metrics.recordEventProcessing(event.getEventType(), System.nanoTime() - startedAt);
         eventRepository.save(event);
     }
 }
