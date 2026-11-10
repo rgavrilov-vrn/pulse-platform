@@ -46,6 +46,7 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
         for (ParsedTrassirEnvelope.Event event : envelope.events()) {
             TrassirEvent entity = new TrassirEvent();
             entity.setRawId(raw.getId());
+            entity.setServerId(envelope.server().serverId());
             entity.setEventIndex(index++);
             entity.setEventId(event.eventId());
             entity.setEventType(event.eventType());

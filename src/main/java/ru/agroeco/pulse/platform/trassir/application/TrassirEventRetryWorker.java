@@ -75,7 +75,7 @@ public class TrassirEventRetryWorker {
             );
 
             return new TrassirEventContext(
-                    null,
+                    event.getServerId(),
                     null,
                     Instant.now(),
                     parsed
