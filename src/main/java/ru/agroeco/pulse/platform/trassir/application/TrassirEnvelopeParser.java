@@ -1,10 +1,12 @@
 package ru.agroeco.pulse.platform.trassir.application;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
+@Slf4j
 @Component
 public class TrassirEnvelopeParser {
 
@@ -22,6 +24,9 @@ public class TrassirEnvelopeParser {
             throw badRequest("EMPTY_TRASSIR_BODY");
         }
 
+        log.debug("TRASSIR ingest body prefix: {}",
+                rawBody.substring(0, Math.min(rawBody.length(), 500)));
+
         try {
             ParsedTrassirEnvelope envelope = objectMapper.readValue(
                     rawBody,
@@ -29,7 +34,14 @@ public class TrassirEnvelopeParser {
             );
             validate(envelope);
             return envelope;
+        } catch (ResponseStatusException e) {
+            throw e;
         } catch (Exception e) {
+            log.warn("Failed to parse TRASSIR envelope: {}: {}",
+                    e.getClass().getSimpleName(),
+                    e.getMessage(),
+                    e
+            );
             throw badRequest("INVALID_TRASSIR_ENVELOPE");
         }
     }
