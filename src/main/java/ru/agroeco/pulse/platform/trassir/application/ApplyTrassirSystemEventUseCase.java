@@ -16,12 +16,7 @@ public class ApplyTrassirSystemEventUseCase implements TrassirEventUseCase {
 
     @Override
     public EventProcessingResult handle(TrassirEventContext context) {
-        JsonNode data;
-        try {
-            data = objectMapper.readTree(context.event().data());
-        } catch (Exception e) {
-            return EventProcessingResult.failure("INVALID_TRASSIR_EVENT_DATA");
-        }
+        JsonNode data = context.event().data();
 
         String severity = text(data, "severity");
         if (severity == null) {
@@ -38,12 +33,24 @@ public class ApplyTrassirSystemEventUseCase implements TrassirEventUseCase {
         entity.setOccurredAt(context.event().occurredAt());
         entity.setObservedAt(context.event().observedAt());
         entity.setSeverity(severity);
-        entity.setSource(context.event().source());
-        entity.setData(context.event().data());
-        entity.setRawEvent(context.event().data());
+        entity.setSource(toJson(context.event().source()));
+        entity.setData(toJson(context.event().data()));
+        entity.setRawEvent(toJson(context.event().data()));
         systemEventRepository.save(entity);
 
         return EventProcessingResult.success();
+    }
+
+    private String toJson(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "{}";
+        }
+
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private String text(JsonNode node, String field) {

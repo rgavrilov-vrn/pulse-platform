@@ -27,12 +27,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
 
     @Override
     public EventProcessingResult handle(TrassirEventContext context) {
-        JsonNode data;
-        try {
-            data = objectMapper.readTree(context.event().data());
-        } catch (Exception e) {
-            return EventProcessingResult.failure("INVALID_TRASSIR_EVENT_DATA");
-        }
+        JsonNode data = context.event().data();
 
         String streamId = text(data, "stream_id");
         Long snapshotSeq = longValue(data, "snapshot_seq");
@@ -63,7 +58,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         TrassirSnapshotPart part = new TrassirSnapshotPart();
         part.setSnapshotId(snapshot.getId());
         part.setPartIndex(partIndex);
-        part.setPayload(context.event().data());
+        part.setPayload(toJson(context.event().data()));
         part.setReceivedAt(context.event().observedAt());
         partRepository.save(part);
 
@@ -134,6 +129,18 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         streamRepository.save(stream);
 
         return EventProcessingResult.success();
+    }
+
+    private String toJson(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "{}";
+        }
+
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private String text(JsonNode node, String field) {

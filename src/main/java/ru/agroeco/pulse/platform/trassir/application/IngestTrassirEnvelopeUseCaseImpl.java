@@ -7,6 +7,8 @@ import ru.agroeco.pulse.platform.trassir.domain.TrassirEvent;
 import ru.agroeco.pulse.platform.trassir.domain.TrassirIngestRaw;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirEventRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirIngestRawRepository;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 
@@ -18,6 +20,7 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
     private final TrassirEventRouter router;
     private final TrassirIngestRawRepository rawRepository;
     private final TrassirEventRepository eventRepository;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -45,9 +48,9 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
             entity.setEventVersion(event.eventVersion());
             entity.setOccurredAt(event.occurredAt());
             entity.setObservedAt(event.observedAt());
-            entity.setSource(event.source());
-            entity.setData(event.data());
-            entity.setRawEvent(event.data());
+            entity.setSource(toJson(event.source()));
+            entity.setData(toJson(event.data()));
+            entity.setRawEvent(toJson(event.data()));
             entity = eventRepository.save(entity);
 
             TrassirEventContext context = new TrassirEventContext(
@@ -62,6 +65,18 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
                 entity.setProcessingError(result.error());
                 eventRepository.save(entity);
             }
+        }
+    }
+
+    private String toJson(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "{}";
+        }
+
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return "{}";
         }
     }
 }

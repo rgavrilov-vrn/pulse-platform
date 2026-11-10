@@ -2,6 +2,7 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;
 import java.util.List;
@@ -38,8 +39,8 @@ public record ParsedTrassirEnvelope(
             @JsonAlias("event_version") String eventVersion,
             Instant occurredAt,
             Instant observedAt,
-            String source,
-            String data
+            JsonNode source,
+            JsonNode data
     ) {
     }
 }

@@ -21,12 +21,7 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
 
     @Override
     public EventProcessingResult handle(TrassirEventContext context) {
-        JsonNode data;
-        try {
-            data = objectMapper.readTree(context.event().data());
-        } catch (Exception e) {
-            return EventProcessingResult.failure("INVALID_TRASSIR_EVENT_DATA");
-        }
+        JsonNode data = context.event().data();
 
         String component = text(data, "component");
         String status = text(data, "status");
@@ -53,10 +48,22 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
         heartbeat.setObservedAt(context.event().observedAt());
         heartbeat.setComponent(component);
         heartbeat.setStatus(status);
-        heartbeat.setDetails(context.event().data());
+        heartbeat.setDetails(toJson(context.event().data()));
         heartbeatRepository.save(heartbeat);
 
         return EventProcessingResult.success();
+    }
+
+    private String toJson(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "{}";
+        }
+
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private String text(JsonNode node, String field) {
