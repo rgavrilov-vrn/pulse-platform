@@ -88,14 +88,12 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             }
 
             for (JsonNode item : objects) {
-                String objectKey = text(item, "object_key");
+                String objectKey = text(item, "object_id");
                 if (objectKey == null) {
-                    return EventProcessingResult.failure("Snapshot object_key is required");
+                    return EventProcessingResult.failure("Snapshot object_id is required");
                 }
 
-                String objectPayload = item.get("payload") != null
-                        ? item.get("payload").toString()
-                        : "{}";
+                String objectPayload = item.toString();
 
                 TrassirSnapshotObject snapshotObject = new TrassirSnapshotObject();
                 snapshotObject.setSnapshotId(snapshot.getId());
