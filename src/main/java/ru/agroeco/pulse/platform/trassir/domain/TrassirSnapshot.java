@@ -19,6 +19,9 @@ public class TrassirSnapshot {
     @GeneratedValue
     private UUID id;
 
+    @Column(name = "external_snapshot_id", nullable = false, unique = true)
+    private UUID externalSnapshotId;
+
     @Column(name = "server_id", nullable = false)
     private String serverId;
 

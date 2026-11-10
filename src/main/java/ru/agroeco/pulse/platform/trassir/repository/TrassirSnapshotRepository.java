@@ -12,10 +12,9 @@ import java.util.UUID;
 
 public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot, UUID> {
 
-    Optional<TrassirSnapshot> findByServerIdAndStreamIdAndSnapshotSeq(
+    Optional<TrassirSnapshot> findByServerIdAndExternalSnapshotId(
             String serverId,
-            String streamId,
-            Long snapshotSeq
+            UUID externalSnapshotId
     );
 
     @Modifying

@@ -40,32 +40,28 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             );
         }
 
-        UUID snapshotUuid;
+        UUID externalSnapshotId;
         try {
-            snapshotUuid = UUID.fromString(snapshotId);
+            externalSnapshotId = UUID.fromString(snapshotId);
         } catch (IllegalArgumentException e) {
             return EventProcessingResult.failure("Snapshot data.snapshot_id must be a valid UUID");
         }
 
         TrassirSnapshot snapshot = snapshotRepository
-                .findById(snapshotUuid)
+                .findByServerIdAndExternalSnapshotId(context.serverId(), externalSnapshotId)
                 .orElseGet(() -> {
                     TrassirSnapshot created = new TrassirSnapshot();
-                    created.setId(snapshotUuid);
+                    created.setExternalSnapshotId(externalSnapshotId);
                     created.setServerId(context.serverId());
                     created.setStreamId(snapshotId);
                     created.setSnapshotSeq(0L);
                     created.setTotalParts(totalParts);
                     created.setReceivedAt(context.event().observedAt());
-                    return created;
+                    return snapshotRepository.save(created);
                 });
 
         if (snapshot.getCompletedAt() != null) {
             return EventProcessingResult.success();
-        }
-
-        if (!snapshotRepository.existsById(snapshotUuid)) {
-            snapshotRepository.save(snapshot);
         }
 
         if (!partRepository.existsBySnapshotIdAndPartIndex(snapshot.getId(), partIndex)) {
@@ -78,11 +74,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         }
 
         if (partRepository.countBySnapshotId(snapshot.getId()) < totalParts) {
-            return EventProcessingResult.success();
-        }
-
-        int updated = snapshotRepository.completeIfPending(snapshotUuid, Instant.now());
-        if (updated == 0) {
             return EventProcessingResult.success();
         }
 
@@ -129,6 +120,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                 objectRepository.save(object);
             }
         }
+
+        snapshotRepository.completeIfPending(snapshot.getId(), Instant.now());
 
         TrassirSnapshotStream stream = streamRepository
                 .findByServerIdAndStreamId(context.serverId(), snapshotId)
