@@ -64,7 +64,9 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.success();
         }
 
-        snapshot = snapshotRepository.save(snapshot);
+        if (!snapshotRepository.existsById(snapshotUuid)) {
+            snapshotRepository.save(snapshot);
+        }
 
         if (!partRepository.existsBySnapshotIdAndPartIndex(snapshot.getId(), partIndex)) {
             TrassirSnapshotPart part = new TrassirSnapshotPart();
@@ -79,8 +81,10 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.success();
         }
 
-        snapshot.setCompletedAt(Instant.now());
-        snapshotRepository.save(snapshot);
+        int updated = snapshotRepository.completeIfPending(snapshotUuid, Instant.now());
+        if (updated == 0) {
+            return EventProcessingResult.success();
+        }
 
         List<TrassirSnapshotPart> parts = partRepository.findBySnapshotIdOrderByPartIndex(snapshot.getId());
         for (TrassirSnapshotPart storedPart : parts) {
