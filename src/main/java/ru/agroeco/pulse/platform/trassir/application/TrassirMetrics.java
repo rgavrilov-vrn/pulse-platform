@@ -53,4 +53,16 @@ public class TrassirMetrics {
                 "event_type", eventType
         ).record(durationNanos, TimeUnit.NANOSECONDS);
     }
+
+    public void recordPendingSnapshots(long count) {
+        registry.gauge("trassir_snapshots_pending_total", count);
+    }
+
+    public void incrementSnapshotRetried() {
+        registry.counter("trassir_snapshots_retried_total").increment();
+    }
+
+    public void incrementSnapshotDeadLetter() {
+        registry.counter("trassir_snapshots_dead_letter_total").increment();
+    }
 }
