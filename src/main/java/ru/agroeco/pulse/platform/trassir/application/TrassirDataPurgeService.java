@@ -13,13 +13,13 @@ import ru.agroeco.pulse.trassir.domain.AdminAuditLog;
 import ru.agroeco.pulse.trassir.repository.AdminAuditLogRepository;
 import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
 import ru.agroeco.pulse.trassir.repository.TrassirIngestRawRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotObjectRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotPartRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotStreamRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirAgentHeartbeatRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirObjectRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirServerStateRepository;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotObjectRepository;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotPartRepository;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotRepository;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotStreamRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSystemEventRepository;
 
 import java.util.LinkedHashMap;
