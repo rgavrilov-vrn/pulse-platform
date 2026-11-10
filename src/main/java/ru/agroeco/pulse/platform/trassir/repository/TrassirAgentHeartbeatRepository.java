@@ -1,15 +1,9 @@
 package ru.agroeco.pulse.platform.trassir.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import ru.agroeco.pulse.platform.trassir.domain.TrassirAgentHeartbeat;
+import org.springframework.data.repository.NoRepositoryBean;
 
-import java.util.UUID;
-
-public interface TrassirAgentHeartbeatRepository extends JpaRepository<TrassirAgentHeartbeat, UUID> {
-
-    @Modifying
-    @Query("delete from TrassirAgentHeartbeat heartbeat")
-    int deleteAllHeartbeats();
+/** Temporary alias, excluded from Spring Data repository registration. */
+@Deprecated
+@NoRepositoryBean
+public interface TrassirAgentHeartbeatRepository extends ru.agroeco.pulse.trassir.repository.TrassirAgentHeartbeatRepository {
 }
