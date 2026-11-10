@@ -3,6 +3,8 @@ package ru.agroeco.pulse.platform.trassir.application;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.agroeco.pulse.platform.trassir.domain.TrassirEvent;
+import ru.agroeco.pulse.platform.trassir.domain.TrassirIngestRaw;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirEventRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirIngestRawRepository;
 

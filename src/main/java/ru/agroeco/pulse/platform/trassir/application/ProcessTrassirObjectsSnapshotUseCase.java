@@ -2,6 +2,7 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.agroeco.pulse.platform.trassir.domain.*;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirObjectRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotObjectRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirSnapshotPartRepository;
