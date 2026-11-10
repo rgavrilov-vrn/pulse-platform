@@ -10,5 +10,7 @@ public interface TrassirSnapshotPartRepository extends JpaRepository<TrassirSnap
 
     long countBySnapshotId(UUID snapshotId);
 
+    boolean existsBySnapshotIdAndPartIndex(UUID snapshotId, Integer partIndex);
+
     List<TrassirSnapshotPart> findBySnapshotIdOrderByPartIndex(UUID snapshotId);
 }

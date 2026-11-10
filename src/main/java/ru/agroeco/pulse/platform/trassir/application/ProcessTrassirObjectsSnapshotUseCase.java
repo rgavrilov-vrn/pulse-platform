@@ -53,18 +53,27 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                     TrassirSnapshot created = new TrassirSnapshot();
                     created.setId(snapshotUuid);
                     created.setServerId(context.serverId());
+                    created.setStreamId(snapshotId);
+                    created.setSnapshotSeq(0L);
                     created.setTotalParts(totalParts);
                     created.setReceivedAt(context.event().observedAt());
                     return created;
                 });
+
+        if (snapshot.getCompletedAt() != null) {
+            return EventProcessingResult.success();
+        }
+
         snapshot = snapshotRepository.save(snapshot);
 
-        TrassirSnapshotPart part = new TrassirSnapshotPart();
-        part.setSnapshotId(snapshot.getId());
-        part.setPartIndex(partIndex);
-        part.setPayload(toJson(context.event().data()));
-        part.setReceivedAt(context.event().observedAt());
-        partRepository.save(part);
+        if (!partRepository.existsBySnapshotIdAndPartIndex(snapshot.getId(), partIndex)) {
+            TrassirSnapshotPart part = new TrassirSnapshotPart();
+            part.setSnapshotId(snapshot.getId());
+            part.setPartIndex(partIndex);
+            part.setPayload(toJson(context.event().data()));
+            part.setReceivedAt(context.event().observedAt());
+            partRepository.save(part);
+        }
 
         if (partRepository.countBySnapshotId(snapshot.getId()) < totalParts) {
             return EventProcessingResult.success();
