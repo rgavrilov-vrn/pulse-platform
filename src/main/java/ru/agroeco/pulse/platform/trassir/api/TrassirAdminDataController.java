@@ -3,6 +3,7 @@ package ru.agroeco.pulse.platform.trassir.api;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.agroeco.pulse.platform.trassir.application.TrassirDataPurgeService;
@@ -20,5 +21,10 @@ public class TrassirAdminDataController {
     public ResponseEntity<Map<String, Object>> purgeAll() {
         Map<String, Object> result = purgeService.purgeAll();
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/audit")
+    public ResponseEntity<?> auditLog() {
+        return ResponseEntity.ok(purgeService.getAuditLog());
     }
 }

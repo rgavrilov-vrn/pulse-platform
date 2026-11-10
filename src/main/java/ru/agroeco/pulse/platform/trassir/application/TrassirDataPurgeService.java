@@ -2,6 +2,9 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -44,6 +47,11 @@ public class TrassirDataPurgeService {
         result.put("deletedEvents", deletedEvents);
         result.put("deletedRawBatches", deletedRaw);
         return result;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AdminAuditLog> getAuditLog() {
+        return auditLogRepository.findAll(PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "createdAt")));
     }
 
     private String currentActor() {
