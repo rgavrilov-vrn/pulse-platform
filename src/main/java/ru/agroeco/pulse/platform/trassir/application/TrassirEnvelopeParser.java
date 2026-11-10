@@ -1,11 +1,10 @@
 package ru.agroeco.pulse.platform.trassir.application;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
-/** Temporary adapter while callers migrate to the trassir module. */
-@Component
+/** Temporary non-bean compatibility adapter; remove after migration. */
+@Deprecated
 public class TrassirEnvelopeParser {
 
     private final ru.agroeco.pulse.trassir.application.TrassirEnvelopeParser delegate;
