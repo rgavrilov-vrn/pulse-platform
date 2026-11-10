@@ -30,6 +30,7 @@ public class IncidentService {
     private static final String DEFAULT_SOURCE = "manual";
     private final IncidentRepository incidents;
     private final SourceRepository sources;
+    private final CommentRepository comments;          // ← возвращено: нужно для listComments
     private final StatusHistoryRepository statusHistory;
     private final StatusTransitionRepository transitions;
     private final EventDispatcher events;
@@ -37,11 +38,10 @@ public class IncidentService {
     private final ChecklistItemRepository checklistItems;
     private final ViolationCategoryRepository categories;
     private final CategoryGroupRepository groups;
-    private final IncidentSummaryEnricher summaryEnricher;
+    private final IncidentSummaryEnricher summaryEnricher;   // только один раз
     private final IncidentCardFields cardFields;
     private final IncidentCategoryChange categoryChange;
-    private final CommentService commentService;   // FIX #68
-    private final IncidentSummaryEnricher summaryEnricher;   // уже было
+    private final CommentService commentService;       // FIX #68 — для add()
 
     @Transactional
     public IncidentDetails create(CreateIncidentRequest req, UUID actorId) {
@@ -77,9 +77,9 @@ public class IncidentService {
     public PageResponse<IncidentSummary> list(Specification<IncidentEntity> spec, Pageable pageable) {
         Page<IncidentEntity> page = incidents.findAll(spec, pageable);
         var response = PageResponse.of(page, this::toSummary);
-        return new PageResponse<>(summaryEnricher.enrich(response.content()),response.page(),
-                response.size(),response.totalElements(),response.totalPages(),
-                response.hasNext(),response.hasPrevious());
+        return new PageResponse<>(summaryEnricher.enrich(response.content()), response.page(),
+                response.size(), response.totalElements(), response.totalPages(),
+                response.hasNext(), response.hasPrevious());
     }
 
     @Transactional(readOnly = true)
@@ -116,6 +116,7 @@ public class IncidentService {
         if (from == to) {
             throw new BusinessRuleException("Incident already has status " + to);
         }
+        // FIX #51: единственный источник правды — status_transitions.
         var tid = new StatusTransitionId(from, to);
         if (!transitions.existsById(tid)) {
             throw new BusinessRuleException("Transition " + from + " → " + to + " is not allowed");
@@ -150,7 +151,7 @@ public class IncidentService {
         return toDetails(incident);
     }
 
-    // Публичный API для контроллера (IncidentController.addComment)
+    /** Публичный API для IncidentController.addComment. */
     @Transactional
     public CommentView addComment(UUID incidentId, AddCommentRequest req, UUID actorId) {
         return commentService.add(incidentId, req, actorId);
@@ -173,10 +174,10 @@ public class IncidentService {
         return new IncidentSummary(
                 i.getId(), i.getNumber(), i.getSource(), i.getCreationMode(),
                 i.getStatus(), i.getSeverity(),
-                null,                                  // kind заполнит enricher
+                null,                                  // kind заполнит enricher (FIX #62)
                 i.getEventTime(), i.getCreatedAt(), i.getUpdatedAt(),
                 i.getAssignedTo(), i.getComment(),
-                i.getCategoryId(), null);              // categoryName заполнит enricher
+                i.getCategoryId(), null);              // categoryName заполнит enricher (FIX #62)
     }
 
     private IncidentDetails toDetails(IncidentEntity i) {
@@ -210,8 +211,7 @@ public class IncidentService {
         IncidentEntity incident = incidents.findByIdForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + id));
 
-        // FIX #54: контентные правки (category, eventTime, checkpoint) — только
-        // в статусах allowsContentEdit(). Комментарий — можно в любом, кроме ARCHIVED.
+        // FIX #54: контентные правки — только в allowsContentEdit().
         boolean editingContent = req.categoryId() != null
                 || req.eventTime() != null
                 || (req.checkpoint() != null && !req.checkpoint().isBlank());
@@ -240,7 +240,7 @@ public class IncidentService {
 
         if (req.checkpoint() != null && !req.checkpoint().isBlank()) {
             var link = addCheckpointLink(incident, req.checkpoint(), actorId);
-            // FIX #49: диспатчим всегда, а не только при смене категории.
+            // FIX #49: диспатчим всегда.
             events.dispatch(IncidentCheckpointAdded.builder()
                     .incidentId(id)
                     .linkId(link.getId())
@@ -276,7 +276,6 @@ public class IncidentService {
             UUID incidentId, String checklistItemCode, String comment, UUID actorId) {
         IncidentEntity incident = incidents.findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
-        // FIX #54: заменено isTerminal() → allowsContentEdit()
         if (!incident.getStatus().allowsContentEdit()) {
             throw new BusinessRuleException(
                     "Нельзя добавлять чек-поинты в статусе " + incident.getStatus());
@@ -301,28 +300,35 @@ public class IncidentService {
 
     @Transactional
     public void removeCheckpoint(UUID incidentId, UUID linkId, UUID actorId) {
-        var incident=incidents.findByIdForUpdate(incidentId)
+        var incident = incidents.findByIdForUpdate(incidentId)
                 .orElseThrow(() -> new NotFoundException("Incident not found: " + incidentId));
-        if(incident.getStatus()!=IncidentStatus.DRAFT)
-            throw new BusinessRuleException("Снимать привязки контрольных точек можно только в черновике");
+        if (incident.getStatus() != IncidentStatus.DRAFT)
+            throw new BusinessRuleException(
+                    "Снимать привязки контрольных точек можно только в черновике");
         IncidentChecklistItemEntity link = checklistLinks.findById(linkId)
                 .filter(l -> l.getIncidentId().equals(incidentId)).filter(l -> !l.isDeleted())
                 .orElseThrow(() -> new NotFoundException("Checkpoint link not found: " + linkId));
-        var metadata=new HashMap<String,Object>();
-        if(incident.getMetadata()!=null) metadata.putAll(incident.getMetadata());
-        Object legacyId=metadata.get("checklistItemId"),legacyCode=metadata.get("checkpoint"),legacyName=metadata.get("checklistItemName");
+        var metadata = new HashMap<String, Object>();
+        if (incident.getMetadata() != null) metadata.putAll(incident.getMetadata());
+        Object legacyId = metadata.get("checklistItemId"),
+                legacyCode = metadata.get("checkpoint"),
+                legacyName = metadata.get("checklistItemName");
         boolean matches;
-        if(legacyId!=null && !legacyId.toString().isBlank()) matches=link.getChecklistItemId().toString().equals(legacyId.toString());
-        else if(legacyCode!=null && !legacyCode.toString().isBlank()) matches=checklistItems.findById(link.getChecklistItemId())
-                .map(item->item.getCode().equals(legacyCode.toString())).orElse(false);
-        else matches=legacyName!=null && legacyName.toString().equals(link.getItemNameSnapshot());
-        if(matches) {
-            metadata.remove("checkpoint");metadata.remove("checklistItemId");metadata.remove("checklistItemName");
+        if (legacyId != null && !legacyId.toString().isBlank())
+            matches = link.getChecklistItemId().toString().equals(legacyId.toString());
+        else if (legacyCode != null && !legacyCode.toString().isBlank())
+            matches = checklistItems.findById(link.getChecklistItemId())
+                    .map(item -> item.getCode().equals(legacyCode.toString())).orElse(false);
+        else matches = legacyName != null && legacyName.toString().equals(link.getItemNameSnapshot());
+        if (matches) {
+            metadata.remove("checkpoint");
+            metadata.remove("checklistItemId");
+            metadata.remove("checklistItemName");
         }
-        var now=Instant.now();
-        link.setDeleted(true);link.setDeletedAt(now);link.setDeletedBy(actorId);
-        incident.setMetadata(metadata);incident.setUpdatedBy(actorId);incident.setUpdatedAt(now);
-        checklistLinks.saveAndFlush(link);incidents.saveAndFlush(incident);
+        var now = Instant.now();
+        link.setDeleted(true); link.setDeletedAt(now); link.setDeletedBy(actorId);
+        incident.setMetadata(metadata); incident.setUpdatedBy(actorId); incident.setUpdatedAt(now);
+        checklistLinks.saveAndFlush(link); incidents.saveAndFlush(incident);
         events.dispatch(IncidentCheckpointRemoved.builder()
                 .incidentId(incidentId).linkId(linkId).checklistItemId(link.getChecklistItemId())
                 .actorId(actorId).occurredAt(now).build());
@@ -349,7 +355,8 @@ public class IncidentService {
         IncidentChecklistItemEntity link = IncidentChecklistItemEntity.builder()
                 .incidentId(incident.getId()).checklistItemId(item.getId())
                 .itemNameSnapshot(item.getName()).categoryNameSnapshot(category.getName())
-                .severity(item.getDefaultSeverity()).comment(comment).createdBy(actorId)
+                .severity(item.getDefaultSeverity())   // оба enum (FIX #66) — OK
+                .comment(comment).createdBy(actorId)
                 .deleted(false).build();
         return checklistLinks.save(link);
     }
@@ -358,6 +365,8 @@ public class IncidentService {
         return new IncidentChecklistItemView(
                 l.getId(), l.getIncidentId(), l.getChecklistItemId(),
                 l.getItemNameSnapshot(), l.getCategoryNameSnapshot(),
-                l.getSeverity(), l.getComment(), l.getCreatedBy(), l.getCreatedAt());
+                // FIX #66: severity — enum в entity, в DTO — String.
+                l.getSeverity() != null ? l.getSeverity().name() : null,
+                l.getComment(), l.getCreatedBy(), l.getCreatedAt());
     }
 }
