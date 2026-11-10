@@ -24,10 +24,17 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
         JsonNode data = context.event().data();
 
         String component = text(data, "component");
+        String status = text(data, "status");
 
         if (component == null) {
             return EventProcessingResult.failure(
                     "Heartbeat data.component must be a nonblank string"
+            );
+        }
+
+        if (status == null) {
+            return EventProcessingResult.failure(
+                    "Heartbeat data.status must be a nonblank string"
             );
         }
 
@@ -46,7 +53,7 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
         heartbeat.setServerId(context.serverId());
         heartbeat.setObservedAt(context.event().observedAt());
         heartbeat.setComponent(component);
-        heartbeat.setStatus(text(data, "status"));
+        heartbeat.setStatus(status);
         heartbeat.setDetails(toJson(context.event().data()));
         heartbeatRepository.save(heartbeat);
 

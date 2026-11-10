@@ -54,8 +54,20 @@ public class TrassirEvent {
     @Column(name = "raw_event", nullable = false, updatable = false)
     private String rawEvent;
 
+    @Column(name = "status", nullable = false)
+    private String status;
+
     @Column(name = "processing_error")
     private String processingError;
+
+    @Column(name = "last_error")
+    private String lastError;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "next_retry_at")
+    private Instant nextRetryAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -64,6 +76,12 @@ public class TrassirEvent {
     void onCreate() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (status == null) {
+            status = "PENDING";
+        }
+        if (retryCount == null) {
+            retryCount = 0;
         }
     }
 }

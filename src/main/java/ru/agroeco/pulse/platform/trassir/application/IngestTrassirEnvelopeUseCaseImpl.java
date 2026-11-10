@@ -55,6 +55,8 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
             entity.setSource(toJson(event.source()));
             entity.setData(toJson(event.data()));
             entity.setRawEvent(toJson(event.data()));
+            entity.setStatus("PENDING");
+            entity.setRetryCount(0);
             entity = eventRepository.save(entity);
 
             TrassirEventContext context = new TrassirEventContext(
@@ -65,10 +67,21 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
             );
 
             EventProcessingResult result = router.route(context);
-            if (!result.successful()) {
+
+            if (result.successful()) {
+                entity.setStatus("PROCESSED");
+                entity.setProcessingError(null);
+                entity.setLastError(null);
+                entity.setNextRetryAt(null);
+            } else {
+                entity.setStatus("FAILED");
                 entity.setProcessingError(result.error());
-                eventRepository.save(entity);
+                entity.setLastError(result.error());
+                entity.setRetryCount(0);
+                entity.setNextRetryAt(Instant.now());
             }
+
+            eventRepository.save(entity);
         }
     }
 
