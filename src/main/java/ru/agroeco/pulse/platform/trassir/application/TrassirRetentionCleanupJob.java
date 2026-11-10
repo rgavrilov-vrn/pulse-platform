@@ -6,8 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirEventRepository;
-import ru.agroeco.pulse.platform.trassir.repository.TrassirIngestRawRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirIngestRawRepository;
 
 import java.time.Duration;
 import java.time.Instant;
