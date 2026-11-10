@@ -1,6 +1,7 @@
 package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.trassir.domain.TrassirEvent;
@@ -11,15 +12,18 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUseCase {
 
     private final TrassirEnvelopeParser parser;
-    private final TrassirEventRouter router;
     private final TrassirIngestRawRepository rawRepository;
     private final TrassirEventRepository eventRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -42,7 +46,9 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
         raw.setRawBody(rawBody);
         raw = rawRepository.save(raw);
 
+        List<UUID> eventIds = new ArrayList<>();
         int index = 0;
+
         for (ParsedTrassirEnvelope.Event event : envelope.events()) {
             TrassirEvent entity = new TrassirEvent();
             entity.setRawId(raw.getId());
@@ -59,31 +65,16 @@ public class IngestTrassirEnvelopeUseCaseImpl implements IngestTrassirEnvelopeUs
             entity.setStatus("PENDING");
             entity.setRetryCount(0);
             entity = eventRepository.save(entity);
-
-            TrassirEventContext context = new TrassirEventContext(
-                    envelope.server().serverId(),
-                    envelope.batchId(),
-                    receivedAt,
-                    event
-            );
-
-            EventProcessingResult result = router.route(context);
-
-            if (result.successful()) {
-                entity.setStatus("PROCESSED");
-                entity.setProcessingError(null);
-                entity.setLastError(null);
-                entity.setNextRetryAt(null);
-            } else {
-                entity.setStatus("FAILED");
-                entity.setProcessingError(result.error());
-                entity.setLastError(result.error());
-                entity.setRetryCount(0);
-                entity.setNextRetryAt(Instant.now());
-            }
-
-            eventRepository.save(entity);
+            eventIds.add(entity.getId());
         }
+
+        eventPublisher.publishEvent(new TrassirEventsAcceptedEvent(
+                raw.getId(),
+                envelope.server().serverId(),
+                envelope.batchId(),
+                receivedAt,
+                eventIds
+        ));
     }
 
     private String toJson(JsonNode node) {
