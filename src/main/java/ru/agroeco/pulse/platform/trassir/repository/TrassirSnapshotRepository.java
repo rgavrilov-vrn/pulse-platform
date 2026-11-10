@@ -20,9 +20,24 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
     @Modifying
     @Query("""
             update TrassirSnapshot snapshot
-            set snapshot.completedAt = :completedAt
+            set snapshot.completedAt = :completedAt,
+                snapshot.status = 'COMPLETED',
+                snapshot.lastError = null,
+                snapshot.nextRetryAt = null
             where snapshot.id = :id
               and snapshot.completedAt is null
             """)
     int completeIfPending(@Param("id") UUID id, @Param("completedAt") Instant completedAt);
+
+    @Modifying
+    @Query("""
+            update TrassirSnapshot snapshot
+            set snapshot.status = 'FAILED',
+                snapshot.lastError = :error,
+                snapshot.retryCount = snapshot.retryCount + 1,
+                snapshot.nextRetryAt = :nextRetryAt
+            where snapshot.id = :id
+              and snapshot.completedAt is null
+            """)
+    int markFailed(@Param("id") UUID id, @Param("error") String error, @Param("nextRetryAt") Instant nextRetryAt);
 }

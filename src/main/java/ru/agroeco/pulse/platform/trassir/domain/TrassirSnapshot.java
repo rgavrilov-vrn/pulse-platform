@@ -39,4 +39,16 @@ public class TrassirSnapshot {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "status", nullable = false)
+    private String status = "PENDING";
+
+    @Column(name = "last_error")
+    private String lastError;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "next_retry_at")
+    private Instant nextRetryAt;
 }

@@ -47,3 +47,13 @@ groups:
         annotations:
           summary: "TRASSIR ingest latency is high"
           description: "95th percentile ingest latency exceeded 2 seconds."
+
+      - alert: TrassirStaleSnapshots
+        expr: |
+          trassir_snapshots_pending_total > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TRASSIR snapshots are stale"
+          description: "One or more snapshots remain pending for more than 10 minutes."

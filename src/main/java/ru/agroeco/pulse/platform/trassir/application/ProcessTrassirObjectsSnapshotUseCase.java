@@ -57,6 +57,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                     created.setSnapshotSeq(0L);
                     created.setTotalParts(totalParts);
                     created.setReceivedAt(context.event().observedAt());
+                    created.setStatus("PENDING");
+                    created.setRetryCount(0);
                     return snapshotRepository.save(created);
                 });
 
@@ -77,66 +79,75 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.success();
         }
 
-        List<TrassirSnapshotPart> parts = partRepository.findBySnapshotIdOrderByPartIndex(snapshot.getId());
-        for (TrassirSnapshotPart storedPart : parts) {
-            JsonNode payload;
-            try {
-                payload = objectMapper.readTree(storedPart.getPayload());
-            } catch (Exception e) {
-                return EventProcessingResult.failure("INVALID_TRASSIR_SNAPSHOT_PART");
-            }
-
-            JsonNode objects = payload.get("objects");
-            if (objects == null || !objects.isArray()) {
-                continue;
-            }
-
-            for (JsonNode item : objects) {
-                String objectKey = text(item, "object_id");
-                if (objectKey == null) {
-                    return EventProcessingResult.failure("Snapshot object_id is required");
+        try {
+            List<TrassirSnapshotPart> parts = partRepository.findBySnapshotIdOrderByPartIndex(snapshot.getId());
+            for (TrassirSnapshotPart storedPart : parts) {
+                JsonNode payload;
+                try {
+                    payload = objectMapper.readTree(storedPart.getPayload());
+                } catch (Exception e) {
+                    return failure(snapshot, "INVALID_TRASSIR_SNAPSHOT_PART");
                 }
 
-                String objectPayload = item.toString();
+                JsonNode objects = payload.get("objects");
+                if (objects == null || !objects.isArray()) {
+                    continue;
+                }
 
-                TrassirSnapshotObject snapshotObject = new TrassirSnapshotObject();
-                snapshotObject.setSnapshotId(snapshot.getId());
-                snapshotObject.setObjectKey(objectKey);
-                snapshotObject.setObjectPayload(objectPayload);
-                snapshotObjectRepository.save(snapshotObject);
+                for (JsonNode item : objects) {
+                    String objectKey = text(item, "object_id");
+                    if (objectKey == null) {
+                        return failure(snapshot, "Snapshot object_id is required");
+                    }
 
-                TrassirObject object = objectRepository
-                        .findByServerIdAndObjectKey(context.serverId(), objectKey)
-                        .orElseGet(() -> {
-                            TrassirObject created = new TrassirObject();
-                            created.setServerId(context.serverId());
-                            created.setObjectKey(objectKey);
-                            created.setFirstSeenAt(context.event().observedAt());
-                            return created;
-                        });
-                object.setObjectPayload(objectPayload);
-                object.setLastSeenAt(context.event().observedAt());
-                object.setDeletedAt(null);
-                objectRepository.save(object);
+                    String objectPayload = item.toString();
+
+                    TrassirSnapshotObject snapshotObject = new TrassirSnapshotObject();
+                    snapshotObject.setSnapshotId(snapshot.getId());
+                    snapshotObject.setObjectKey(objectKey);
+                    snapshotObject.setObjectPayload(objectPayload);
+                    snapshotObjectRepository.save(snapshotObject);
+
+                    TrassirObject object = objectRepository
+                            .findByServerIdAndObjectKey(context.serverId(), objectKey)
+                            .orElseGet(() -> {
+                                TrassirObject created = new TrassirObject();
+                                created.setServerId(context.serverId());
+                                created.setObjectKey(objectKey);
+                                created.setFirstSeenAt(context.event().observedAt());
+                                return created;
+                            });
+                    object.setObjectPayload(objectPayload);
+                    object.setLastSeenAt(context.event().observedAt());
+                    object.setDeletedAt(null);
+                    objectRepository.save(object);
+                }
             }
+
+            snapshotRepository.completeIfPending(snapshot.getId(), Instant.now());
+
+            TrassirSnapshotStream stream = streamRepository
+                    .findByServerIdAndStreamId(context.serverId(), snapshotId)
+                    .orElseGet(() -> {
+                        TrassirSnapshotStream created = new TrassirSnapshotStream();
+                        created.setServerId(context.serverId());
+                        created.setStreamId(snapshotId);
+                        return created;
+                    });
+            stream.setLastSnapshotId(snapshot.getId());
+            stream.setLastPartIndex(partIndex);
+            stream.setUpdatedAt(Instant.now());
+            streamRepository.save(stream);
+
+            return EventProcessingResult.success();
+        } catch (Exception e) {
+            return failure(snapshot, e.getClass().getSimpleName() + ": " + e.getMessage());
         }
+    }
 
-        snapshotRepository.completeIfPending(snapshot.getId(), Instant.now());
-
-        TrassirSnapshotStream stream = streamRepository
-                .findByServerIdAndStreamId(context.serverId(), snapshotId)
-                .orElseGet(() -> {
-                    TrassirSnapshotStream created = new TrassirSnapshotStream();
-                    created.setServerId(context.serverId());
-                    created.setStreamId(snapshotId);
-                    return created;
-                });
-        stream.setLastSnapshotId(snapshot.getId());
-        stream.setLastPartIndex(partIndex);
-        stream.setUpdatedAt(Instant.now());
-        streamRepository.save(stream);
-
-        return EventProcessingResult.success();
+    private EventProcessingResult failure(TrassirSnapshot snapshot, String error) {
+        snapshotRepository.markFailed(snapshot.getId(), error, Instant.now());
+        return EventProcessingResult.failure(error);
     }
 
     private String toJson(JsonNode node) {
