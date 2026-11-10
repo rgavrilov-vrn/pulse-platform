@@ -2,13 +2,26 @@
 # Только overrides поверх application.yml.
 # Всё, что совпадает с application.yml (datasource, kafka, goodwan, server.*),
 # здесь НЕ дублируется — Spring Boot мержит профили поверх base.
-
 spring:
   jpa:
     show-sql: true
   output:
     ansi:
       enabled: always
+  kafka:
+    listener:
+      auto-startup: false
+app:
+  kafka:
+    enabled: false
+  outbox:
+    relay-enabled: false
+  security:
+    jwt:
+      secret: test-secret-test-secret-test-secret-test-secret
+goodwan:
+  sync:
+    enabled: false
 
 logging:
   # В base (application.yml) SQL-логи выключены (INFO) — включаем только в local.

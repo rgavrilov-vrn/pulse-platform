@@ -30,7 +30,7 @@ public class TrassirAgentHeartbeat {
     @Column(nullable = false)
     private String component;
 
-    @Column(nullable = false)
+    @Column(name = "status")
     private String status;
 
     @JdbcTypeCode(SqlTypes.JSON)

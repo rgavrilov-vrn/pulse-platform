@@ -3,6 +3,7 @@ package ru.agroeco.pulse.outbox.infrastructure.kafka;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.Map;
 @Setter
 @Getter
 @ConfigurationProperties(prefix = "app.outbox")
+@EnableConfigurationProperties(OutboxKafkaProperties.class)
 public class OutboxKafkaProperties {
     private String defaultTopic = "pulse.events";
     private int batchSize = 50;

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,10 @@ import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(
+        name = "app.kafka.enabled",
+        havingValue = "true"
+)
 public class OutboxStateUpdater {
 
     /**
