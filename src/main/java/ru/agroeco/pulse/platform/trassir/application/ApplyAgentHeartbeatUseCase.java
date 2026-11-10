@@ -2,6 +2,8 @@ package ru.agroeco.pulse.platform.trassir.application;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.agroeco.pulse.platform.trassir.domain.TrassirAgentHeartbeat;
+import ru.agroeco.pulse.platform.trassir.domain.TrassirServerState;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirAgentHeartbeatRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirServerStateRepository;
 import tools.jackson.databind.JsonNode;
