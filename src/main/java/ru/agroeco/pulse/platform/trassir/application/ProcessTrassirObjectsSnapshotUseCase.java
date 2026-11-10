@@ -13,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -29,26 +30,29 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     public EventProcessingResult handle(TrassirEventContext context) {
         JsonNode data = context.event().data();
 
-        String streamId = text(data, "stream_id");
-        Long snapshotSeq = longValue(data, "snapshot_seq");
-        Integer totalParts = intValue(data, "total_parts");
+        String snapshotId = text(data, "snapshot_id");
+        Integer totalParts = intValue(data, "parts_total");
         Integer partIndex = intValue(data, "part_index");
 
-        if (streamId == null || snapshotSeq == null || totalParts == null || partIndex == null) {
+        if (snapshotId == null || totalParts == null || partIndex == null) {
             return EventProcessingResult.failure(
-                    "Snapshot data.stream_id, snapshot_seq, total_parts and part_index are required"
+                    "Snapshot data.snapshot_id, parts_total and part_index are required"
             );
         }
 
+        UUID snapshotUuid;
+        try {
+            snapshotUuid = UUID.fromString(snapshotId);
+        } catch (IllegalArgumentException e) {
+            return EventProcessingResult.failure("Snapshot data.snapshot_id must be a valid UUID");
+        }
+
         TrassirSnapshot snapshot = snapshotRepository
-                .findByServerIdAndStreamIdAndSnapshotSeq(
-                        context.serverId(), streamId, snapshotSeq
-                )
+                .findById(snapshotUuid)
                 .orElseGet(() -> {
                     TrassirSnapshot created = new TrassirSnapshot();
+                    created.setId(snapshotUuid);
                     created.setServerId(context.serverId());
-                    created.setStreamId(streamId);
-                    created.setSnapshotSeq(snapshotSeq);
                     created.setTotalParts(totalParts);
                     created.setReceivedAt(context.event().observedAt());
                     return created;
@@ -116,11 +120,11 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         }
 
         TrassirSnapshotStream stream = streamRepository
-                .findByServerIdAndStreamId(context.serverId(), streamId)
+                .findByServerIdAndStreamId(context.serverId(), snapshotId)
                 .orElseGet(() -> {
                     TrassirSnapshotStream created = new TrassirSnapshotStream();
                     created.setServerId(context.serverId());
-                    created.setStreamId(streamId);
+                    created.setStreamId(snapshotId);
                     return created;
                 });
         stream.setLastSnapshotId(snapshot.getId());
@@ -148,11 +152,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         return value != null && value.isString() && !value.asString().isBlank()
                 ? value.asString()
                 : null;
-    }
-
-    private Long longValue(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        return value != null && value.canConvertToLong() ? value.asLong() : null;
     }
 
     private Integer intValue(JsonNode node, String field) {
