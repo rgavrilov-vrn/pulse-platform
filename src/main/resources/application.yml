@@ -107,6 +107,14 @@ app:
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
       issuer: ${JWT_ISSUER:pulse-platform}
       audience: ${JWT_AUDIENCE:pulse-api}
+  auth:
+    role-assignment:
+      # FIX #22: выдача этих ролей требует authority system:admin.
+      # Иначе любой с user:assign_role мог выдать себе/другу SUPERUSER.
+      protected-roles:
+        - SUPERUSER
+        - ADMIN
+      protected-role-authority: system:admin
 
 management:
   endpoints:
