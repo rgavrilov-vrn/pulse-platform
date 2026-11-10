@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.trassir.config;
+package ru.agroeco.pulse.trassir.config;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.annotation.Bean;

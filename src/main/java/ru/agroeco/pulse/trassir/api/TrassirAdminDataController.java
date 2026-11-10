@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.trassir.api;
+package ru.agroeco.pulse.trassir.api;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

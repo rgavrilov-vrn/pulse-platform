@@ -1,21 +1,31 @@
+# application.yml
+# Base-конфиг. Рассчитан на production: все секреты и окружение — через env.
+# Профиль local активируется явно: --spring.profiles.active=local
+# (FIX #32: удалён spring.profiles.default=local — иначе прод мог тихо
+#  стартовать в local-режиме с отключённой Kafka и debug-логами).
+
 spring:
   application:
     name: pulse-platform
-  profiles:
-    default: local
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pulse_platform}
     username: ${DB_USERNAME:pulse_platform_app}
     password: ${DB_PASSWORD:password@pulse.ru}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: true
     validate-on-migrate: true
+    # FIX: чистое создание БД с нуля — baseline не нужен.
+    # (baseline-on-migrate=true маскирует пропущенные миграции.)
+    baseline-on-migrate: false
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -29,18 +39,23 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: pulse-platform
-      auto-offset-reset: earliest
+      # FIX #35: earliest — dev-дефолт, при первом запуске consumer group
+      # вычитывает весь backlog топика. Для production — latest.
+      auto-offset-reset: latest
+      # FIX #11, #38: VideoEventNormalizedConsumer принимает `String payload`
+      # и парсит вручную через ObjectMapper. JsonDeserializer вернул бы
+      # LinkedHashMap → MessageConversionException. Убран также
+      # spring.json.trusted.packages (больше не нужен).
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "ru.agroeco.pulse.*"
-  main:
-    web-application-type: servlet
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
 server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /pulse-platform
 
+# FIX #36: spring.main.web-application-type: servlet — избыточно
+# (deduce и так вернёт SERVLET при наличии spring-boot-starter-webmvc).
 
 app:
   kafka:
@@ -48,29 +63,47 @@ app:
     topic:
       video-events: pulse.videoserver.events
       incident-events: pulse.incident.events
-      notification-requests: pulse.notification.requests
-      notification-status: pulse.notification.status
+      # notification-requests / notification-status удалены:
+      # модуля уведомлений в коде нет (FIX #13).
+
   outbox:
     relay-enabled: true
     batch-size: 50
     max-attempts: 5
     relay-interval-ms: 5000
     default-topic: pulse.events
+    # FIX #12, #13: ключи должны точно совпадать с DomainEvent.outboxEventType().
+    #   * IncidentCreated — override → "IncidentCreated" (PascalCase);
+    #   * остальные — DomainEventType.getValue() (UPPER_SNAKE_CASE).
+    # Убраны несуществующие: IncidentAssigned / IncidentConfirmed /
+    # IncidentRejected / IncidentClosed / VideoEventNormalized /
+    # NotificationRequested / NotificationStatus.
+    #
+    # Рекомендация: удалить override в IncidentCreated.outboxEventType(),
+    # чтобы ВСЕ ключи стали UPPER_SNAKE_CASE (INCIDENT_CREATED).
     event-topics:
-      VideoEventNormalized: ${app.kafka.topic.video-events}
-      IncidentCreated:      ${app.kafka.topic.incident-events}
-      IncidentAssigned:     ${app.kafka.topic.incident-events}
-      IncidentConfirmed:    ${app.kafka.topic.incident-events}
-      IncidentRejected:     ${app.kafka.topic.incident-events}
-      IncidentClosed:       ${app.kafka.topic.incident-events}
-      NotificationRequested: ${app.kafka.topic.notification-requests}
-      NotificationStatus:    ${app.kafka.topic.notification-status}
+      IncidentCreated:               ${app.kafka.topic.incident-events}
+      INCIDENT_STATUS_CHANGED:       ${app.kafka.topic.incident-events}
+      INCIDENT_COMMENT_ADDED:        ${app.kafka.topic.incident-events}
+      INCIDENT_UPDATED:              ${app.kafka.topic.incident-events}
+      INCIDENT_CHECKPOINT_ADDED:     ${app.kafka.topic.incident-events}
+      INCIDENT_CHECKPOINT_REMOVED:   ${app.kafka.topic.incident-events}
+      INCIDENT_MATERIAL_UPLOADED:    ${app.kafka.topic.incident-events}
+      INCIDENT_MATERIAL_DELETED:     ${app.kafka.topic.incident-events}
+      INCIDENT_MATERIAL_DOWNLOADED:  ${app.kafka.topic.incident-events}
+      VIDEO_EVENT_INGESTED:          ${app.kafka.topic.video-events}
+
   cors:
-    allowed-origins:
-      - ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173}
+    # FIX #39: убран YAML-дефис. Spring Boot разбивает скаляр по запятой
+    # в List<String> автоматически; с дефисом получался список из ОДНОГО
+    # элемента — "http://localhost:5173,http://..." (CORS preflight падал).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173}
+
   security:
     jwt:
-      secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-secret}
+      # FIX #33: секрет БЕЗ дефолта — fail-fast, если JWT_SECRET не задан.
+      # Для local — см. application-local.yml.
+      secret: ${JWT_SECRET}
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
       issuer: ${JWT_ISSUER:pulse-platform}
       audience: ${JWT_AUDIENCE:pulse-api}
@@ -79,7 +112,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        # metrics убран: Prometheus скрейпит /actuator/prometheus, а /actuator/metrics
+        # требует system:admin — для ручной отладки достаточно prometheus.
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when-authorized
@@ -96,10 +131,10 @@ springdoc:
 logging:
   level:
     root: INFO
-    ru.agroeco.pulse.platform: DEBUG
-    ru.agroeco.pulse.goodwan: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
+    ru.agroeco.pulse: DEBUG
+    # FIX #34: org.hibernate.SQL=DEBUG и orm.jdbc.bind=TRACE удалены из base —
+    # это утечка SQL-параметров (включая password_hash при логине).
+    # Включаются только в application-local.yml.
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%thread] %logger{36} - %msg%n"
   charset:
@@ -107,7 +142,9 @@ logging:
     file: UTF-8
 
 goodwan:
-  base-url: https://my.goodwan.ru/api
+  base-url: ${GOODWAN_BASE_URL:https://my.goodwan.ru/api}
+  # FIX: без дефолта — fail-fast, если в проде не задан GOODWAN_USERNAME.
+  # В local профиле переопределяется на dev-not-configured.
   username: ${GOODWAN_USERNAME}
   password: ${GOODWAN_PASSWORD}
   sync:

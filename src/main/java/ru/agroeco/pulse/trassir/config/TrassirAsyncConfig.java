@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.platform.trassir.config;
+package ru.agroeco.pulse.trassir.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;

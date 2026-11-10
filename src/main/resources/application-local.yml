@@ -1,7 +1,11 @@
 # application-local.yml
-# Только overrides поверх application.yml.
-# Всё, что совпадает с application.yml (datasource, kafka, goodwan, server.*),
-# здесь НЕ дублируется — Spring Boot мержит профили поверх base.
+# Только overrides поверх base.
+# Активируется: --spring.profiles.active=local (или SPRING_PROFILES_ACTIVE=local).
+#
+# ВАЖНО: в base удалён spring.profiles.default=local (FIX #32).
+# Без явного профиля приложение стартует в production-режиме и упадёт
+# на отсутствии JWT_SECRET / GOODWAN_USERNAME — это ожидаемо.
+
 spring:
   jpa:
     show-sql: true
@@ -10,7 +14,9 @@ spring:
       enabled: always
   kafka:
     listener:
+      # Kafka в local не поднята.
       auto-startup: false
+
 app:
   kafka:
     enabled: false
@@ -18,13 +24,21 @@ app:
     relay-enabled: false
   security:
     jwt:
+      # FIX #33: единственное место с dev-секретом. В production
+      # задаётся через JWT_SECRET в окружении.
       secret: test-secret-test-secret-test-secret-test-secret
+
+# FIX: в base goodwan.username/password теперь без дефолта (fail-fast).
+# В local sync отключён, но @ConfigurationProperties всё равно биндится →
+# нужны явные значения, иначе placeholder не разрешится на старте.
 goodwan:
+  username: dev-not-configured
+  password: dev-not-configured
   sync:
     enabled: false
 
 logging:
-  # В base (application.yml) SQL-логи выключены (INFO) — включаем только в local.
+  # FIX #34: SQL-логи — только в local.
   level:
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE
