@@ -1,0 +1,6 @@
+package test;
+
+public class Test {
+    @GetMapping("/x")
+    public String x() { return "ok"; }
+}
