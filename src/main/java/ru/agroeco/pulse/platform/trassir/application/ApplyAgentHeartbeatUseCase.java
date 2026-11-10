@@ -7,44 +7,31 @@ import ru.agroeco.pulse.platform.trassir.domain.TrassirServerState;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirAgentHeartbeatRepository;
 import ru.agroeco.pulse.platform.trassir.repository.TrassirServerStateRepository;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
 public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
-
     private final TrassirAgentHeartbeatRepository heartbeatRepository;
     private final TrassirServerStateRepository serverStateRepository;
-    private final ObjectMapper objectMapper;
 
     @Override
     public EventProcessingResult handle(TrassirEventContext context) {
         JsonNode data = context.event().data();
-
         String component = text(data, "component");
-        String status = text(data, "status");
-
         if (component == null) {
-            return EventProcessingResult.failure(
-                    "Heartbeat data.component must be a nonblank string"
-            );
+            return EventProcessingResult.failure("Heartbeat data.component must be a nonblank string");
         }
-
+        String status = text(data, "status");
         if (status == null) {
-            return EventProcessingResult.failure(
-                    "Heartbeat data.status must be a nonblank string"
-            );
+            status = "UNKNOWN";
         }
-
-        TrassirServerState state = serverStateRepository
-                .findById(context.serverId())
-                .orElseGet(() -> {
-                    TrassirServerState created = new TrassirServerState();
-                    created.setServerId(context.serverId());
-                    return created;
-                });
+        TrassirServerState state = serverStateRepository.findById(context.serverId()).orElseGet(() -> {
+            TrassirServerState created = new TrassirServerState();
+            created.setServerId(context.serverId());
+            return created;
+        });
         state.setLastHeartbeatAt(context.event().observedAt());
         state.setUpdatedAt(Instant.now());
         serverStateRepository.save(state);
@@ -54,28 +41,14 @@ public class ApplyAgentHeartbeatUseCase implements TrassirEventUseCase {
         heartbeat.setObservedAt(context.event().observedAt());
         heartbeat.setComponent(component);
         heartbeat.setStatus(status);
-        heartbeat.setDetails(toJson(context.event().data()));
+        heartbeat.setDetails(data.toString());
         heartbeatRepository.save(heartbeat);
-
         return EventProcessingResult.success();
     }
 
-    private String toJson(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return "{}";
-        }
-
-        try {
-            return objectMapper.writeValueAsString(node);
-        } catch (Exception e) {
-            return "{}";
-        }
-    }
-
     private String text(JsonNode node, String field) {
+        if (node == null || node.isNull()) return null;
         JsonNode value = node.get(field);
-        return value != null && value.isString() && !value.asString().isBlank()
-                ? value.asString()
-                : null;
+        return value != null && value.isString() && !value.asString().isBlank() ? value.asString() : null;
     }
 }
