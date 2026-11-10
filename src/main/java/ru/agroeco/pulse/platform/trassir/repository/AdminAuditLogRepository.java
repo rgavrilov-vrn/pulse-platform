@@ -1,9 +1,9 @@
 package ru.agroeco.pulse.platform.trassir.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import ru.agroeco.pulse.platform.trassir.domain.AdminAuditLog;
+import org.springframework.data.repository.NoRepositoryBean;
 
-import java.util.UUID;
-
-public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, UUID> {
+/** Temporary alias, excluded from Spring Data repository registration. */
+@Deprecated
+@NoRepositoryBean
+public interface AdminAuditLogRepository extends ru.agroeco.pulse.trassir.repository.AdminAuditLogRepository {
 }
