@@ -10,12 +10,12 @@ import ru.agroeco.pulse.trassir.domain.TrassirServerState;
 import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
 import ru.agroeco.pulse.trassir.domain.TrassirSnapshotPart;
 import ru.agroeco.pulse.trassir.domain.TrassirSnapshotStream;
-import ru.agroeco.pulse.trassir.repository.TrassirObjectRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirServerStateRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotObjectRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotPartRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotStreamRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirObjectRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirServerStateRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotObjectRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotPartRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotStreamRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 

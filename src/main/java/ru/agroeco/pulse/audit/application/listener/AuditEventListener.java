@@ -2,7 +2,6 @@ package ru.agroeco.pulse.audit.application.listener;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -16,7 +15,7 @@ import ru.agroeco.pulse.audit.adapter.persistence.AuditEventEntity;
 import ru.agroeco.pulse.audit.domain.exception.AuditException;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.platform.domain.event.DomainEventType;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;

@@ -16,13 +16,13 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import ru.agroeco.pulse.auth.application.LoginAuditService;
-import ru.agroeco.pulse.platform.application.dto.TokenRequest;
-import ru.agroeco.pulse.platform.application.dto.TokenResponse;
+import ru.agroeco.pulse.platform.adapter.http.dto.TokenRequest;
+import ru.agroeco.pulse.platform.adapter.http.dto.TokenResponse;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticated;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
-import ru.agroeco.pulse.platform.security.JwtService;
-import ru.agroeco.pulse.platform.security.TokenRevocationPort;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
+import ru.agroeco.pulse.platform.application.security.JwtService;
+import ru.agroeco.pulse.platform.application.security.port.TokenRevocationPort;
 
 import java.time.Instant;
 

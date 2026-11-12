@@ -1,6 +1,6 @@
 package ru.agroeco.pulse.incident.domain.event;
 
-import ru.agroeco.pulse.incident.report.ObjectReportController;
+import ru.agroeco.pulse.incident.adapter.http.report.ObjectReportController;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
 import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 

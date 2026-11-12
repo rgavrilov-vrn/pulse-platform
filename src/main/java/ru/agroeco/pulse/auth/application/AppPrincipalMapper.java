@@ -8,7 +8,7 @@ import ru.agroeco.pulse.auth.domain.RoleEntity;
 import ru.agroeco.pulse.auth.domain.RolePermissionEntity;
 import ru.agroeco.pulse.auth.domain.UserEntity;
 import ru.agroeco.pulse.auth.domain.UserRoleEntity;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;

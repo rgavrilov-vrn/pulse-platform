@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.agroeco.pulse.trassir.domain.TrassirAgentHeartbeat;
 import ru.agroeco.pulse.trassir.domain.TrassirServerState;
-import ru.agroeco.pulse.trassir.repository.TrassirAgentHeartbeatRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirServerStateRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirAgentHeartbeatRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirServerStateRepository;
 import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;

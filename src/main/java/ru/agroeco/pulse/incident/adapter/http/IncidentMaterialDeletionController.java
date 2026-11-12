@@ -6,7 +6,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ru.agroeco.pulse.incident.application.DeleteIncidentMaterialService;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 
 import java.util.UUID;
 

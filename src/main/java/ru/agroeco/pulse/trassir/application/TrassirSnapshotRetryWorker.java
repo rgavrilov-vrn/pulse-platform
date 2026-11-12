@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotRepository;
 
 import java.time.Instant;
 

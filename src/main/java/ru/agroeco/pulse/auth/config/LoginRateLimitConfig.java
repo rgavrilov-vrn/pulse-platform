@@ -5,7 +5,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import ru.agroeco.pulse.auth.adapter.http.LoginRateLimitFilter;
+import ru.agroeco.pulse.auth.adapter.http.filter.LoginRateLimitFilter;
 import ru.agroeco.pulse.auth.application.LoginRateLimiterProperties;
 import tools.jackson.databind.ObjectMapper;
 

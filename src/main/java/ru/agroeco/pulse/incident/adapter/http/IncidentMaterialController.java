@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.agroeco.pulse.incident.application.IncidentMaterialService;
 import ru.agroeco.pulse.incident.application.IncidentMaterialService.MaterialView;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

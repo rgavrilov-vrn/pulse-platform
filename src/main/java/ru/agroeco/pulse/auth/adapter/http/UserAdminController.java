@@ -34,7 +34,7 @@ import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.DuplicateEventException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 import ru.agroeco.pulse.platform.validation.ByteLength;
 
 import java.time.Instant;

@@ -9,7 +9,7 @@ import ru.agroeco.pulse.incident.adapter.http.dto.ViolationCategoryAdminView;
 import ru.agroeco.pulse.incident.application.IncidentCatalogRestoreService;
 import ru.agroeco.pulse.incident.domain.ChecklistItemEntity;
 import ru.agroeco.pulse.incident.domain.ViolationCategoryEntity;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 
 import java.util.UUID;
 

@@ -13,7 +13,7 @@ import ru.agroeco.pulse.incident.application.IncidentCatalogAdminService.Categor
 import ru.agroeco.pulse.incident.application.IncidentCatalogAdminService.PointInput;
 import ru.agroeco.pulse.incident.domain.ChecklistItemEntity;
 import ru.agroeco.pulse.incident.domain.ViolationCategoryEntity;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 
 import java.util.List;
 import java.util.Map;

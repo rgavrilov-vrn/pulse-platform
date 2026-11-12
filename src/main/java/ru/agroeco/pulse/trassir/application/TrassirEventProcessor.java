@@ -14,8 +14,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.agroeco.pulse.trassir.domain.TrassirEvent;
 import ru.agroeco.pulse.trassir.domain.TrassirIngestRaw;
-import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirIngestRawRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirEventRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirIngestRawRepository;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;

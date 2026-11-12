@@ -10,15 +10,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.platform.security.AppPrincipal;
+import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
 import ru.agroeco.pulse.trassir.domain.AdminAuditLog;
-import ru.agroeco.pulse.trassir.repository.AdminAuditLogRepository;
-import tools.jackson.databind.ObjectMapper;
+import ru.agroeco.pulse.trassir.adapter.persistence.AdminAuditLogRepository;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Slf4j
 @Service

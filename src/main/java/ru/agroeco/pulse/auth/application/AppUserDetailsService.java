@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.auth.adapter.persistence.UserRepository;
 import ru.agroeco.pulse.auth.domain.UserEntity;
-import ru.agroeco.pulse.platform.security.UserDetailsByIdService;
+import ru.agroeco.pulse.platform.application.security.port.UserDetailsByIdService;
 
 import java.util.UUID;
 

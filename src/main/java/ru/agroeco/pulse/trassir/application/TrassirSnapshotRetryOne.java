@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
-import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotRepository;
 
 import java.time.Instant;
 import java.util.UUID;

@@ -6,9 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
-import ru.agroeco.pulse.trassir.repository.TrassirIngestRawRepository;
-import tools.jackson.databind.JsonNode;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirEventRepository;
+import ru.agroeco.pulse.trassir.adapter.persistence.TrassirIngestRawRepository;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;

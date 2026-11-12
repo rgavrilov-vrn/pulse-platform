@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.auth.adapter.persistence.RevokedJtiRepository;
 import ru.agroeco.pulse.auth.domain.RevokedJtiEntity;
-import ru.agroeco.pulse.platform.security.TokenRevocationPort;
+import ru.agroeco.pulse.platform.application.security.port.TokenRevocationPort;
 
 import java.time.Instant;
 

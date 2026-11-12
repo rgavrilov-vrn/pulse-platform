@@ -22,7 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import ru.agroeco.pulse.platform.api.support.CorrelationIds;
-import ru.agroeco.pulse.platform.application.dto.ErrorResponse;
+import ru.agroeco.pulse.platform.adapter.http.dto.ErrorResponse;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.DuplicateEventException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
