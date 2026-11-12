@@ -10,10 +10,12 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import ru.agroeco.pulse.platform.api.support.CorrelationIds;
 import tools.jackson.databind.ObjectMapper;
 import ru.agroeco.pulse.audit.adapter.persistence.AuditEventEntity;
 import ru.agroeco.pulse.audit.domain.exception.AuditException;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.platform.security.AppPrincipal;
 
 import java.net.InetAddress;
@@ -27,31 +29,38 @@ import java.util.UUID;
 @Slf4j
 public class AuditEventListener {
 
-    /** Синхронизировано с RequestLoggingFilter.CORRELATION_ID. */
-    private static final String CORRELATION_ID_MDC_KEY = "correlationId";
-
     private static final String AUTH_SCHEMA = "auth";
 
     /**
-     * Только эти действия fail-open. Дискриминируем по action, а не по схеме:
-     * USER_ROLE_CHANGED тоже живёт в auth, но должен быть fail-closed.
+     * FIX #132: Set<DomainEventType> вместо Set<String>. Компилятор подскажет,
+     * если добавят новый auth-тип и забудут про fail-open.
      */
-    private static final Set<String> FAIL_OPEN_ACTIONS = Set.of(
-            "USER_AUTHENTICATED",
-            "USER_AUTHENTICATION_FAILED",
-            "USER_LOGGED_OUT"
+    private static final Set<DomainEventType> FAIL_OPEN_EVENT_TYPES = Set.of(
+            DomainEventType.USER_AUTHENTICATED,
+            DomainEventType.USER_AUTHENTICATION_FAILED,
+            DomainEventType.USER_LOGGED_OUT
     );
 
-    private final AuditEventWriter writer;   // ← вместо repository
+    private final AuditEventWriter writer;
     private final ObjectMapper mapper;
 
     /**
      * Бизнес-события: fail-closed.
-     * Аудит — часть контракта транзакции, ошибка записи откатывает всё.
+     *
+     * FIX #73: fallbackExecution = false. Раньше при dispatch business-события
+     * вне транзакции on() вызывался, writeInTransaction (MANDATORY) бросал
+     * IllegalTransactionStateException, on() заворачивал в AuditException —
+     * и publishEvent() падал с 500 у вызывающего. Теперь: dispatch вне
+     * транзакции = аудит молча пропускается (тихая потеря лучше 500), а
+     * контракт «все business-события — из @Transactional» фиксируется в коде.
+     *
+     * Если нужен fail-closed на «событие без транзакции» — использовать
+     * ApplicationEventPublisher из @Transactional-метода или проверять
+     * TransactionSynchronizationManager.isActualTransactionActive() в сервисах.
      */
     @TransactionalEventListener(
             phase = TransactionPhase.BEFORE_COMMIT,
-            fallbackExecution = true)
+            fallbackExecution = false)
     public void on(DomainEvent event) {
         if (isFailOpen(event)) return;
         try {
@@ -67,11 +76,9 @@ public class AuditEventListener {
 
     /**
      * Auth-события: fail-open, отдельная транзакция.
-     *
-     * AFTER_COMPLETION, а не AFTER_COMMIT: провал логина может завершаться
-     * rollback'ом (BadCredentialsException после публикации события), и мы
-     * всё равно обязаны записать попытку. REQUIRES_NEW изолирует аудит
-     * от судьбы бизнес-транзакции — 401 не превращается в 500.
+     * fallbackExecution = true — auth-событие может публиковаться вне
+     * транзакции (например, из job или при ошибке аутентификации),
+     * и аудит всё равно должен сработать.
      */
     @TransactionalEventListener(
             phase = TransactionPhase.AFTER_COMPLETION,
@@ -79,17 +86,16 @@ public class AuditEventListener {
     public void onAuth(DomainEvent event) {
         if (!isFailOpen(event)) return;
         try {
-            writer.writeIsolated(buildEntity(event));   // ← proxy целиком внутри try
+            writer.writeIsolated(buildEntity(event));
         } catch (RuntimeException ex) {
             log.error("Auth audit failed for action={} entityId={}",
                     event.eventType().getValue(), event.entityId(), ex);
-            // fail-open: не пробрасываем
         }
     }
 
     private boolean isFailOpen(DomainEvent event) {
         return AUTH_SCHEMA.equals(event.entitySchema())
-                && FAIL_OPEN_ACTIONS.contains(event.eventType().getValue());
+                && FAIL_OPEN_EVENT_TYPES.contains(event.eventType());
     }
 
     private AuditEventEntity buildEntity(DomainEvent event) {
@@ -102,7 +108,7 @@ public class AuditEventListener {
                 .oldData(serialize(event.oldDataSnapshot()))
                 .newData(serialize(event.newDataSnapshot()))
                 .occurredAt(event.occurredAt() != null ? event.occurredAt() : Instant.now())
-                .requestId(MDC.get(CORRELATION_ID_MDC_KEY))
+                .requestId(CorrelationIds.current())
                 .sourceIp(currentSourceIp())
                 .userAgent(currentUserAgent())
                 .build();
@@ -130,10 +136,8 @@ public class AuditEventListener {
         String remoteAddr = attrs.getRequest().getRemoteAddr();
         if (remoteAddr == null || remoteAddr.isBlank()) return null;
         try {
-            // getByName не делает DNS для IP-литералов — JDK распознаёт их сразу.
             return InetAddress.getByName(remoteAddr);
         } catch (UnknownHostException ex) {
-            // Не роняем аудит из-за мусорного remoteAddr (mock-запросы, edge-кейсы прокси).
             return null;
         }
     }

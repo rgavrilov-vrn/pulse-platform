@@ -10,7 +10,6 @@ import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
 import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -28,39 +27,15 @@ public class TrassirSnapshotRetryOne {
     @Value("${pulse.trassir.snapshot-retry.base-delay-seconds:60}")
     private long baseDelaySeconds;
 
-    /**
-     * Один retry-цикл для конкретного snapshot.
-     *
-     * <p>FIX #29: assembly вызывается заново — ранее «ретрай» только сдвигал
-     * {@code next_retry_at} без повторной обработки.</p>
-     *
-     * <p>FIX #77: SKIP LOCKED на lockByIdForRetry — параллельные инстансы
-     * не дублируют работу.</p>
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void retry(UUID snapshotId) {
-        Instant now = Instant.now();
-
-        // FIX #77: блокируем строку с SKIP LOCKED — если занято или уже
-        // не FAILED/completed, выходим без работы.
-        Optional<TrassirSnapshot> locked = snapshotRepository.lockByIdForRetry(snapshotId, now);
-        if (locked.isEmpty()) {
-            log.debug("Snapshot retry skipped (already processed or locked): id={}", snapshotId);
-            return;
-        }
-
         metrics.incrementSnapshotRetried();
 
         EventProcessingResult result = snapshotUseCase.assemble(snapshotId);
-        if (result.successful()) {
-            return;
-        }
+        if (result.successful()) return;
 
-        // Снапшот уже managed — актуализируем поля из БД перед инкрементом.
         TrassirSnapshot snapshot = snapshotRepository.findById(snapshotId).orElse(null);
-        if (snapshot == null || snapshot.getCompletedAt() != null) {
-            return;
-        }
+        if (snapshot == null || snapshot.getCompletedAt() != null) return;
 
         int nextAttempt = snapshot.getRetryCount() + 1;
         if (nextAttempt >= maxAttempts) {
@@ -70,7 +45,8 @@ public class TrassirSnapshotRetryOne {
                     nextAttempt, snapshotId, result.error());
         } else {
             snapshotRepository.markFailed(
-                    snapshotId, result.error(),
+                    snapshotId,
+                    result.error(),
                     Instant.now().plusSeconds(baseDelaySeconds * (1L << nextAttempt)));
         }
     }

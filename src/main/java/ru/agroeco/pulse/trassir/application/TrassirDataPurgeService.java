@@ -27,37 +27,29 @@ public class TrassirDataPurgeService {
 
     private final JdbcTemplate jdbc;
     private final AdminAuditLogRepository auditLogRepository;
-    private final ObjectMapper objectMapper;
 
-    /**
-     * FIX #142: TRUNCATE ... CASCADE вместо DELETE FROM на каждой таблице.
-     * Мгновенно, без WAL-шторма. CASCADE убирает FK-зависимые записи
-     * (events → ingest_raw, snapshot_* → snapshots).
-     *
-     * Порядок важен: сначала листья, потом корни — но TRUNCATE CASCADE
-     * сам разберётся с FK. Просто перечисляем все таблицы в одном TRUNCATE.
-     */
+
     @Transactional
     public Map<String, Object> purgeAll() {
-        // Считаем до truncate — для аудита
         Map<String, Long> before = countAll();
         jdbc.execute("""
-            TRUNCATE TABLE
-                trassir.events,
-                trassir.ingest_raw,
-                trassir.snapshot_parts,
-                trassir.snapshot_objects,
-                trassir.snapshots,
-                trassir.snapshot_streams,
-                trassir.objects,
-                trassir.system_events,
-                trassir.server_state,
-                trassir.agent_heartbeats
-            RESTART IDENTITY CASCADE
-            """);
+        TRUNCATE TABLE
+            trassir.events,
+            trassir.ingest_raw,
+            trassir.snapshot_parts,
+            trassir.snapshot_objects,
+            trassir.snapshots,
+            trassir.snapshot_streams,
+            trassir.objects,
+            trassir.system_events,
+            trassir.server_state,
+            trassir.agent_heartbeats
+        RESTART IDENTITY CASCADE
+        """);
 
         String actor = currentActor();
-        String details = serializeCounts(before);
+        // FIX #85: Map вместо String-конкатенации.
+        Map<String, Object> details = new LinkedHashMap<>(before);
         auditLogRepository.save(AdminAuditLog.builder()
                 .actor(actor)
                 .action("PURGE_ALL")
@@ -114,12 +106,4 @@ public class TrassirDataPurgeService {
         return v == null ? 0L : v;
     }
 
-    private String serializeCounts(Map<String, Long> counts) {
-        try {
-            return objectMapper.writeValueAsString(counts);
-        } catch (Exception e) {
-            log.error("Cannot serialize purge counts", e);
-            return "{}";
-        }
-    }
 }

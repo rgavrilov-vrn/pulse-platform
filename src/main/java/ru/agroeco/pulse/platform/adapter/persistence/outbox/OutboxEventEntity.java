@@ -2,6 +2,7 @@ package ru.agroeco.pulse.platform.adapter.persistence.outbox;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import ru.agroeco.pulse.platform.application.outbox.OutboxStatus;
@@ -11,12 +12,12 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "outbox_events", schema = "outbox")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+// FIX #118: при dispatch N событий в цикле Hibernate объединяет INSERT'ы
+// в один batch. Устраняет N round-trips для IncidentCategoryChange (20 links = 20 INSERT).
+@BatchSize(size = 50)
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class OutboxEventEntity {
+
     @Id
     private UUID id;
 

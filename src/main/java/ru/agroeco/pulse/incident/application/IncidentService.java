@@ -161,7 +161,8 @@ public class IncidentService {
         if (incident.getCategoryId() == null) return null;
         return categories.findById(incident.getCategoryId())
                 .flatMap(category -> groups.findById(category.getGroupId()))
-                .map(group -> IncidentKind.fromGroupCode(group.getCode())).orElse(null);
+                .map(group -> IncidentKind.fromGroupCodeOrNull(group.getCode()))
+                .orElse(null);
     }
 
     private String categoryName(IncidentEntity incident) {
@@ -327,7 +328,7 @@ public class IncidentService {
         }
         var now = Instant.now();
         link.setDeleted(true); link.setDeletedAt(now); link.setDeletedBy(actorId);
-        incident.setMetadata(metadata); incident.setUpdatedBy(actorId); incident.setUpdatedAt(now);
+        incident.setMetadata(metadata); incident.setUpdatedBy(actorId);
         checklistLinks.saveAndFlush(link); incidents.saveAndFlush(incident);
         events.dispatch(IncidentCheckpointRemoved.builder()
                 .incidentId(incidentId).linkId(linkId).checklistItemId(link.getChecklistItemId())

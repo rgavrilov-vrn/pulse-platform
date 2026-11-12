@@ -5,15 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 import ru.agroeco.pulse.trassir.domain.TrassirEvent;
 import ru.agroeco.pulse.trassir.repository.TrassirEventRepository;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Component
@@ -27,23 +22,29 @@ public class TrassirEventRetryWorker {
     @Value("${pulse.trassir.retry.stale-pending-minutes:5}")
     private long stalePendingMinutes;
 
-    @Value("${pulse.trassir.retry.batch-size:50}")
-    private int batchSize;
-
+    /**
+     * FIX #137: без @Transactional на методе. Outer-транзакция с FOR UPDATE
+     * + REQUIRES_NEW внутри давала deadlock. Теперь:
+     *   1. короткий read findProcessableCandidates (без блокировок);
+     *   2. каждая event обрабатывается отдельно (processById — REQUIRES_NEW
+     *      + advisory lock).
+     */
     @Scheduled(fixedDelayString = "${pulse.trassir.retry.interval-ms:30000}")
     public void sweep() {
         Instant now = Instant.now();
         Instant staleCutoff = now.minusSeconds(stalePendingMinutes * 60);
+        var candidates = eventRepository.findProcessableCandidates(now, staleCutoff);
 
-        List<UUID> candidates = eventRepository.findCandidateIdsForRetry(
-                now, staleCutoff, batchSize);
-
-        for (UUID id : candidates) {
+        for (TrassirEvent event : candidates) {
+            if ("PENDING".equals(event.getStatus())) {
+                log.warn("Stale PENDING event picked up: id={}, created={}",
+                        event.getId(), event.getCreatedAt());
+            }
+            metrics.incrementEventRetried(event.getEventType());
             try {
-                // REQUIRES_NEW внутри, со SKIP LOCKED.
-                eventProcessor.processById(id);
+                eventProcessor.processById(event.getId());
             } catch (Exception e) {
-                log.warn("Event retry threw for id={}: {}", id, e.getMessage());
+                log.warn("Retry threw for event {}: {}", event.getId(), e.getMessage());
             }
         }
     }

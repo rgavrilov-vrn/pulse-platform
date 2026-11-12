@@ -25,12 +25,6 @@ public class TrassirAdminDataController {
         return purgeService.purgeAll();
     }
 
-    /**
-     * FIX #145: было {@code ResponseEntity<?>} с {@code Page<AdminAuditLog>} —
-     * наружу уходили entity + служебные поля PageImpl. Теперь — DTO + PageResponse.
-     * FIX #26: @PreAuthorize (SecurityConfig уже закрывает GET /admin/**,
-     * но defense-in-depth — на методе).
-     */
     @GetMapping("/audit")
     @PreAuthorize("hasAuthority('trassir:admin')")
     public PageResponse<AdminAuditLogView> auditLog(

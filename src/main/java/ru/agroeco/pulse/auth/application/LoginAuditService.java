@@ -2,8 +2,8 @@ package ru.agroeco.pulse.auth.application;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticationFailed;
 
 import java.time.Instant;
@@ -13,22 +13,14 @@ import java.time.Instant;
 @Slf4j
 public class LoginAuditService {
 
-    private final ApplicationEventPublisher publisher;
+    // FIX #100: EventDispatcher вместо ApplicationEventPublisher —
+    // единый путь публикации через debug-логирование, фильтрацию,
+    // (потенциально) tracing.
+    private final EventDispatcher events;
 
-    /**
-     * Best-effort аудит неудачной аутентификации.
-     *
-     * ВАЖНО: не пробрасываем исключение наружу — иначе ошибка БД в аудите
-     * заменит исходный AuthenticationException на 500, и клиент не сможет
-     * отличить «неверный пароль» от «сервер упал». Атакующий флудит логинами —
-     * получает DoS через журнал аудита.
-     *
-     * Транзакцию откроет AuditEventListener (fallbackExecution=true);
-     * здесь REQUIRES_NEW не нужен.
-     */
     public void recordFailure(String username, String reason) {
         try {
-            publisher.publishEvent(new UserAuthenticationFailed(
+            events.dispatch(new UserAuthenticationFailed(
                     username, reason, Instant.now()));
         } catch (RuntimeException ex) {
             log.error("Auth audit failed for user={} reason={}", username, reason, ex);

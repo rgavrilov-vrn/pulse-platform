@@ -11,6 +11,7 @@ import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.agroeco.pulse.auth.application.LoginRateLimiterProperties;
+import ru.agroeco.pulse.platform.api.support.CorrelationIds;
 import ru.agroeco.pulse.platform.application.dto.ErrorResponse;
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,8 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Slf4j
 public class LoginRateLimitFilter extends OncePerRequestFilter {
-
-    private static final String CORRELATION_ID_MDC_KEY = "correlationId";
 
     private final LoginRateLimiterProperties props;
     private final ObjectMapper mapper;
@@ -85,7 +84,7 @@ public class LoginRateLimitFilter extends OncePerRequestFilter {
         res.setContentType(MediaType.APPLICATION_JSON_VALUE);
         var body = new ErrorResponse(
                 Instant.now(), status, code, message,
-                List.of(), null, MDC.get(CORRELATION_ID_MDC_KEY));
+                List.of(), null, CorrelationIds.current());
         mapper.writeValue(res.getOutputStream(), body);
     }
 }

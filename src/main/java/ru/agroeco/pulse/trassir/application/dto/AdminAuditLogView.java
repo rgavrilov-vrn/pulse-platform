@@ -1,6 +1,7 @@
 package ru.agroeco.pulse.trassir.application.dto;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 public record AdminAuditLogView(
@@ -8,6 +9,6 @@ public record AdminAuditLogView(
         String actor,
         String action,
         String target,
-        String details,
+        Map<String, Object> details,
         Instant createdAt
 ) {}

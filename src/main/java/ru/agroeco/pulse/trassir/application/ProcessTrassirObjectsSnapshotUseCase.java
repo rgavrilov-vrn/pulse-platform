@@ -5,12 +5,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.trassir.domain.*;
-import ru.agroeco.pulse.trassir.repository.*;
+import ru.agroeco.pulse.trassir.domain.TrassirObject;
+import ru.agroeco.pulse.trassir.domain.TrassirServerState;
+import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
+import ru.agroeco.pulse.trassir.domain.TrassirSnapshotPart;
+import ru.agroeco.pulse.trassir.domain.TrassirSnapshotStream;
+import ru.agroeco.pulse.trassir.repository.TrassirObjectRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirServerStateRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotObjectRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotPartRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotRepository;
+import ru.agroeco.pulse.trassir.repository.TrassirSnapshotStreamRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import ru.agroeco.pulse.trassir.domain.TrassirServerState;
-import ru.agroeco.pulse.trassir.repository.TrassirServerStateRepository;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,10 +33,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     private final TrassirSnapshotStreamRepository streamRepository;
     private final TrassirSnapshotObjectRepository snapshotObjectRepository;
     private final TrassirObjectRepository objectRepository;
+    private final TrassirServerStateRepository serverStateRepository;   // FIX #140
     private final ObjectMapper objectMapper;
-
-    // добавь поле в класс:
-    private final TrassirServerStateRepository serverStateRepository;
 
     @Value("${pulse.trassir.snapshot-retry.base-delay-seconds:60}")
     private long retryBaseDelaySeconds;
@@ -55,7 +60,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.failure("Snapshot data.snapshot_id must be a valid UUID");
         }
 
-        // FIX #27, #28, #30: атомарное создание (stream_id = server_id) + FOR UPDATE.
+        // Атомарное создание + stream_id = server_id (FIX #27, #30)
         snapshotRepository.insertIfAbsent(
                 UUID.randomUUID(), externalSnapshotId, context.serverId(),
                 totalParts, context.event().observedAt());
@@ -69,7 +74,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.success();
         }
 
-        // FIX #28: атомарная вставка part'а
+        // Атомарная вставка part'а (FIX #28)
         partRepository.insertIfAbsent(
                 UUID.randomUUID(), snapshot.getId(), partIndex,
                 toJson(context.event().data()), context.event().observedAt());
@@ -80,8 +85,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
 
         EventProcessingResult result = assembleInternal(snapshot);
 
-        // FIX #16: markFailed фиксируется в той же транзакции,
-        // НЕ откатывается — use case не бросает.
+        // FIX #16: markFailed фиксируется в той же транзакции
         if (!result.successful()) {
             snapshotRepository.markFailed(
                     snapshot.getId(), result.error(),
@@ -91,15 +95,23 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     }
 
     /**
-     * FIX #29: публичный метод для retry-worker. Блокирует snapshot FOR UPDATE,
-     * выполняет сборку. Возвращает success/failure — retry-worker сам решает
-     * про markFailed/dead-letter.
+     * FIX #29 + #137: публичный метод для retry-worker'а.
+     * Advisory lock сериализует конкурентные вызовы (sweep + onEventsAccepted).
      */
     @Transactional
     public EventProcessingResult assemble(UUID snapshotId) {
+        Boolean locked = snapshotRepository.tryAdvisoryLock(snapshotId.toString());
+        if (!Boolean.TRUE.equals(locked)) {
+            log.debug("Snapshot {} already being assembled elsewhere, skipping", snapshotId);
+            return EventProcessingResult.success();
+        }
         TrassirSnapshot snapshot = snapshotRepository.findByIdForUpdate(snapshotId).orElse(null);
-        if (snapshot == null) return EventProcessingResult.failure("Snapshot not found: " + snapshotId);
-        if (snapshot.getCompletedAt() != null) return EventProcessingResult.success();
+        if (snapshot == null) {
+            return EventProcessingResult.failure("Snapshot not found: " + snapshotId);
+        }
+        if (snapshot.getCompletedAt() != null) {
+            return EventProcessingResult.success();
+        }
         return assembleInternal(snapshot);
     }
 
@@ -125,7 +137,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                         return EventProcessingResult.failure("Snapshot object_id is required");
                     }
                     String objectPayload = item.toString();
-                    // FIX #28: атомарная вставка
                     snapshotObjectRepository.insertIfAbsent(
                             UUID.randomUUID(), snapshot.getId(), objectKey, objectPayload);
 
@@ -148,11 +159,11 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             Instant completedAt = Instant.now();
             int claimed = snapshotRepository.completeIfPending(snapshot.getId(), completedAt);
             if (claimed == 0) {
-                // FIX #75: concurrent worker уже завершил — выходим без дублей.
                 log.info("Snapshot {} already completed by concurrent worker", snapshot.getId());
                 return EventProcessingResult.success();
             }
-            // в assembleInternal после completeIfPending:
+
+            // FIX #140: last_snapshot_at в server_state
             TrassirServerState state = serverStateRepository.findById(snapshot.getServerId())
                     .orElseGet(() -> {
                         TrassirServerState created = new TrassirServerState();
@@ -163,7 +174,7 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             state.setUpdatedAt(completedAt);
             serverStateRepository.save(state);
 
-            // FIX #30: stream_id = server_id (стабильный). Одна запись на сервер.
+            // FIX #30: stream_id = server_id (одна запись на сервер)
             TrassirSnapshotStream stream = streamRepository
                     .findByServerIdAndStreamId(snapshot.getServerId(), snapshot.getServerId())
                     .orElseGet(() -> {
@@ -177,9 +188,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             stream.setUpdatedAt(completedAt);
             streamRepository.save(stream);
 
-            // FIX #139: заполняем snapshot_seq порядковым номером
-            // (ранее всегда 0). Оставляем 0 для обратной совместимости,
-            // если колонка не критична — можно удалить в будущем.
             return EventProcessingResult.success();
 
         } catch (Exception e) {

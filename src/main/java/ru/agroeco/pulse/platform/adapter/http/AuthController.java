@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -19,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.agroeco.pulse.auth.application.LoginAuditService;
 import ru.agroeco.pulse.platform.application.dto.TokenRequest;
 import ru.agroeco.pulse.platform.application.dto.TokenResponse;
+import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticated;
 import ru.agroeco.pulse.platform.security.AppPrincipal;
 import ru.agroeco.pulse.platform.security.JwtService;
@@ -35,9 +35,11 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
-    private final ApplicationEventPublisher eventPublisher;
+    // FIX #99: EventDispatcher вместо ApplicationEventPublisher —
+    // единая точка публикации (логирование, фильтрация, tracing).
+    private final EventDispatcher eventDispatcher;
     private final LoginAuditService loginAuditService;
-    private final TokenRevocationPort revocation;   // FIX #48
+    private final TokenRevocationPort revocation;
 
     @PostMapping("/token")
     @Operation(summary = "Issue JWT access token")
@@ -49,10 +51,12 @@ public class AuthController {
                     content = @Content(
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = TokenRequest.class),
+                            // FIX #92: вместо реальных credentials — плейсхолдеры.
+                            // Раньше в Swagger был виден работающий admin/admin.
                             examples = @ExampleObject(
-                                    name = "admin",
-                                    summary = "DEV-ONLY (login = password)",
-                                    value = "{\"username\":\"admin\",\"password\":\"admin\"}"
+                                    name = "example",
+                                    summary = "Credentials (obtain in local environment)",
+                                    value = "{\"username\":\"<username>\",\"password\":\"<password>\"}"
                             )
                     )
             ) @Valid @RequestBody TokenRequest request) {
@@ -65,7 +69,8 @@ public class AuthController {
             String token = jwtService.generateToken(principal);
             long ttl = jwtService.expirationSeconds();
 
-            eventPublisher.publishEvent(new UserAuthenticated(
+            // FIX #99: EventDispatcher.
+            eventDispatcher.dispatch(new UserAuthenticated(
                     principal.id(), principal.username(), Instant.now()));
 
             return ResponseEntity.ok(new TokenResponse(token, "Bearer", ttl));
@@ -82,12 +87,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * FIX #48: отзыв текущего токена. Идемпотентно — повторный logout
-     * на уже отозванном токене вернёт 204. Эндпоинт permitAll в SecurityConfig
-     * (см. SecurityConfig) — фильтр всё равно не пустит с отозванным токеном,
-     * но это не ошибка logout'а.
-     */
     @PostMapping("/logout")
     @Operation(summary = "Revoke current access token")
     public ResponseEntity<Void> logout(

@@ -1,10 +1,10 @@
 package ru.agroeco.pulse.incident.domain.event;
 
 import lombok.Builder;
-import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 import ru.agroeco.pulse.incident.domain.IncidentSeverity;
 import ru.agroeco.pulse.incident.domain.IncidentStatus;
 import ru.agroeco.pulse.platform.domain.event.DomainEvent;
+import ru.agroeco.pulse.platform.domain.event.DomainEventType;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -38,7 +38,12 @@ public record IncidentCreated(
     @Override public Instant occurredAt() { return occurredAt; }
     @Override public UUID actorId() { return actorId; }
 
-    @Override public String outboxEventType() { return "IncidentCreated"; }
+    // FIX #12: override outboxEventType() удалён.
+    // Ключ теперь = DomainEventType.INCIDENT_CREATED.getValue() = "INCIDENT_CREATED"
+    // (UPPER_SNAKE_CASE, единообразно с остальными событиями).
+    // YAML `app.outbox.event-topics` исправлен соответственно:
+    //   было: IncidentCreated: ...
+    //   стало: INCIDENT_CREATED: ...
 
     @Override
     public Object newDataSnapshot() {

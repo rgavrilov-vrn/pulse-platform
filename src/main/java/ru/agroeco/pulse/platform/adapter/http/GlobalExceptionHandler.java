@@ -3,15 +3,14 @@ package ru.agroeco.pulse.platform.adapter.http;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
@@ -22,6 +21,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import ru.agroeco.pulse.platform.api.support.CorrelationIds;
 import ru.agroeco.pulse.platform.application.dto.ErrorResponse;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.DuplicateEventException;
@@ -33,13 +33,6 @@ import java.util.List;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
-
-    /**
-     * Синхронизировано с RequestLoggingFilter.CORRELATION_ID.
-     * Читаем из MDC, чтобы возвращать клиенту сгенерированный сервером ID,
-     * даже если клиент не прислал X-Correlation-Id.
-     */
-    private static final String CORRELATION_ID_MDC_KEY = "correlationId";
 
     // --------------------------------------------------------------- 409/422
 
@@ -54,9 +47,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessRuleException.class)
     public ResponseEntity<ErrorResponse> businessRule(BusinessRuleException ex,
                                                       HttpServletRequest req) {
-        // Единый статус для всех модулей: 422.
-        // Модульные @RestControllerAdvice (videoserver/refs) со своими 409/422
-        // должны быть удалены — см. партию 3.
         return build(HttpStatus.UNPROCESSABLE_CONTENT,
                 "BUSINESS_RULE_VIOLATION", ex.getMessage(), req, null);
     }
@@ -70,7 +60,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> integrity(DataIntegrityViolationException ex,
                                                    HttpServletRequest req) {
-        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        // FIX #96: getMostSpecificCause().getMessage() содержит пользовательские
+        // значения (например, "(code)=(SOME USER INPUT)") — PII в логе.
+        // Логируем только общий тип, детали — на DEBUG (см. ex.getMostSpecificCause()
+        // в локальной отладке).
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        log.debug("Data integrity violation details", ex);
         return build(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION",
                 "Request violates database constraints", req, null);
     }
@@ -78,8 +73,7 @@ public class GlobalExceptionHandler {
     // --------------------------------------------------------------- 404
 
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<ErrorResponse> notFound(NotFoundException ex,
-                                                  HttpServletRequest req) {
+    public ResponseEntity<ErrorResponse> notFound(NotFoundException ex, HttpServletRequest req) {
         return build(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), req, null);
     }
 
@@ -97,16 +91,9 @@ public class GlobalExceptionHandler {
 
     // --------------------------------------------------------------- 401/403
 
-    /**
-     * Spring Security бросает org.springframework.security.core.AuthenticationException
-     * (и подклассы LockedException, DisabledException, AccountExpiredException,
-     * CredentialsExpiredException). В прошлой версии был импорт из
-     * javax.security.sasl — handler не срабатывал, давал 500.
-     */
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponse> onAuthError(AuthenticationException ex,
                                                      HttpServletRequest req) {
-        // Не логируем стек — это ожидаемые бизнес-сценарии (неверный пароль, lock).
         log.debug("Authentication failed: {}", ex.getClass().getSimpleName());
         return build(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED",
                 "Authentication failed", req, null);
@@ -183,18 +170,19 @@ public class GlobalExceptionHandler {
                 req, null);
     }
 
-    // --------------------------------------------------------------- 5xx / generic
+    // --------------------------------------------------------------- 4xx/5xx / generic
 
     /**
-     * ResponseStatusException — стандартный способ Spring бросить 4xx/5xx
-     * с кастомным сообщением. Раньше уходил в Exception → 500.
+     * FIX #97: код ошибки соответствует HTTP-статусу. Раньше всегда был
+     * REQUEST_ERROR — клиент не мог отличить «неверный Content-Type» (415)
+     * от «CONFLICT» (409) по коду.
      */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> responseStatus(ResponseStatusException ex,
                                                         HttpServletRequest req) {
         HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
         if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
-        return build(status, "REQUEST_ERROR", ex.getReason(), req, null);
+        return build(status, codeFor(status), ex.getReason(), req, null);
     }
 
     @ExceptionHandler(Exception.class)
@@ -206,11 +194,38 @@ public class GlobalExceptionHandler {
 
     // --------------------------------------------------------------- helpers
 
+    /** FIX #97: осмысленные коды для ResponseStatusException. */
+    private static String codeFor(HttpStatus status) {
+        return switch (status) {
+            case BAD_REQUEST              -> "BAD_REQUEST";
+            case UNAUTHORIZED             -> "UNAUTHENTICATED";
+            case FORBIDDEN                -> "ACCESS_DENIED";
+            case NOT_FOUND                -> "NOT_FOUND";
+            case METHOD_NOT_ALLOWED       -> "METHOD_NOT_ALLOWED";
+            case NOT_ACCEPTABLE           -> "NOT_ACCEPTABLE";
+            case CONFLICT                 -> "CONFLICT";
+            case UNSUPPORTED_MEDIA_TYPE   -> "UNSUPPORTED_MEDIA_TYPE";
+            case UNPROCESSABLE_CONTENT    -> "UNPROCESSABLE_ENTITY";
+            case TOO_MANY_REQUESTS        -> "TOO_MANY_REQUESTS";
+            case CONTENT_TOO_LARGE        -> "CONTENT_TOO_LARGE";
+            case INTERNAL_SERVER_ERROR    -> "INTERNAL_ERROR";
+            case BAD_GATEWAY              -> "BAD_GATEWAY";
+            case SERVICE_UNAVAILABLE      -> "SERVICE_UNAVAILABLE";
+            default -> {
+                int c = status.value();
+                if (c >= 500) yield "SERVER_ERROR";
+                if (c >= 400) yield "CLIENT_ERROR";
+                yield "UNEXPECTED_STATUS";
+            }
+        };
+    }
+
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String code, String message,
                                                 HttpServletRequest req, List<String> details) {
-        String correlationId = MDC.get(CORRELATION_ID_MDC_KEY);
+        // FIX #95: единая точка чтения correlationId.
+        String correlationId = CorrelationIds.current();
         if (correlationId == null) {
-            correlationId = req.getHeader("X-Correlation-Id");
+            correlationId = req.getHeader(CorrelationIds.HEADER);
         }
         return ResponseEntity.status(status).body(new ErrorResponse(
                 Instant.now(), status.value(), code, message,

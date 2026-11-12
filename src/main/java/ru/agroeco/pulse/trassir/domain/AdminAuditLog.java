@@ -6,15 +6,12 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
 @Table(name = "admin_audit_log", schema = "trassir")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AdminAuditLog {
 
     @Id
@@ -31,20 +28,22 @@ public class AdminAuditLog {
     @Column(name = "target", nullable = false)
     private String target;
 
+    /**
+     * FIX #85: Map<String, Object> вместо String. Раньше `details` собирался
+     * конкатенацией `"{\"deletedEvents\":" + n + "}"` в TrassirDataPurgeService —
+     * хрупко (сломается на первом String-значении) и не парсится при чтении
+     * (клиент получал JSON-строку внутри JSON-строки).
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "details", columnDefinition = "jsonb")
-    private String details;
+    private Map<String, Object> details;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
     void onCreate() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = Instant.now();
     }
 }

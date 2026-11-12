@@ -13,21 +13,22 @@ public class AuditEventWriter {
 
     private final AuditEventRepository repository;
 
-    /**
-     * REQUIRES_NEW: аудит auth-событий не разделяет судьбу бизнес-транзакции.
-     * saveAndFlush: гарантирует, что INSERT выполнится внутри вызова
-     * (а не в commit-хуке), чтобы вызывающий мог поймать ошибку.
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void writeIsolated(AuditEventEntity entity) {
         repository.saveAndFlush(entity);
     }
 
     /**
-     * Пишет в текущей транзакции (fail-closed: ошибка откатит бизнес-операцию).
+     * FIX #74: saveAndFlush вместо save. Раньше INSERT выполнялся на commit
+     * транзакции — вне try/catch из AuditEventListener.on(). Ошибка (unique
+     * violation, size limit) классифицировалась как DATA_INTEGRITY_VIOLATION
+     * вместо AUDIT_FAILURE, маскируя причину.
+     *
+     * С saveAndFlush INSERT выполняется внутри вызова → try/catch ловит,
+     * транзакция откатывается, клиент видит осмысленный код.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void writeInTransaction(AuditEventEntity entity) {
-        repository.save(entity);
+        repository.saveAndFlush(entity);
     }
 }

@@ -11,6 +11,7 @@ import ru.agroeco.pulse.incident.domain.IncidentEntity;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 
 import java.util.HashMap;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,49 +21,43 @@ public class IncidentCardFields {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void apply(IncidentEntity incident, UpdateIncidentRequest req) {
+        // FIX #117: resolvedObjectId — objectId или facilityId (deprecated alias).
+        UUID resolvedObjectId = req.resolvedObjectId();
         boolean clear = Boolean.TRUE.equals(req.clearFacility());
-        boolean locationChanged = req.facilityId() != null || clear;
+        boolean locationChanged = resolvedObjectId != null || clear;
         if (req.severity() == null && !locationChanged) return;
 
-        // FIX #54: severity/facility — только в DRAFT.
         if (!incident.getStatus().allowsDraftOnlyEdit()) {
             throw new BusinessRuleException(
                     "Приоритет и площадку можно менять только в черновике");
         }
-        if (clear && req.facilityId() != null) {
-            throw new BusinessRuleException(
-                    "Нельзя одновременно выбрать и очистить площадку");
+        if (clear && resolvedObjectId != null) {
+            throw new BusinessRuleException("Нельзя одновременно выбрать и очистить площадку");
         }
 
         if (locationChanged) {
             var p = new MapSqlParameterSource("incidentId", incident.getId())
-                    .addValue("facilityId", req.facilityId());
+                    .addValue("facilityId", resolvedObjectId);
 
             if (clear) {
-                // FIX #53: при очистке проверяем наличие любых зон —
-                // раньше CAST(:facilityId AS uuid) = NULL давало IS DISTINCT FROM NULL = TRUE
-                // для ЛЮБОЙ зоны, и «очистить площадку» было невозможно даже без
-                // реального конфликта. Теперь — отдельное сообщение.
                 Long zones = jdbc.queryForObject("""
-                    SELECT count(*) FROM incident.context_refs cr
-                    WHERE cr.incident_id = :incidentId
-                      AND cr.domain = 'ref' AND cr.entity_type = 'zone'
-                    """, p, Long.class);
+                SELECT count(*) FROM incident.context_refs cr
+                WHERE cr.incident_id = :incidentId
+                  AND cr.domain = 'ref' AND cr.entity_type = 'zone'
+                """, p, Long.class);
                 if (zones != null && zones > 0) {
                     throw new BusinessRuleException(
-                            "Нельзя очистить площадку: привязаны зоны. "
-                                    + "Сначала отвяжите зоны.");
+                            "Нельзя очистить площадку: привязаны зоны. Сначала отвяжите зоны.");
                 }
             } else {
-                // Смена площадки: запрещено, если привязана зона другой площадки.
                 Long incompatible = jdbc.queryForObject("""
-                    SELECT count(*) FROM incident.context_refs cr
-                    LEFT JOIN ref.zones z ON z.id = cr.entity_id
-                    WHERE cr.incident_id = :incidentId
-                      AND cr.domain = 'ref' AND cr.entity_type = 'zone'
-                      AND (z.id IS NULL
-                           OR z.object_id IS DISTINCT FROM CAST(:facilityId AS uuid))
-                    """, p, Long.class);
+                SELECT count(*) FROM incident.context_refs cr
+                LEFT JOIN ref.zones z ON z.id = cr.entity_id
+                WHERE cr.incident_id = :incidentId
+                  AND cr.domain = 'ref' AND cr.entity_type = 'zone'
+                  AND (z.id IS NULL
+                       OR z.object_id IS DISTINCT FROM CAST(:facilityId AS uuid))
+                """, p, Long.class);
                 if (incompatible != null && incompatible > 0) {
                     throw new BusinessRuleException(
                             "Нельзя изменить площадку: привязана зона другой площадки. "
@@ -71,11 +66,10 @@ public class IncidentCardFields {
             }
 
             jdbc.update("""
-                DELETE FROM incident.context_refs
-                WHERE incident_id = :incidentId
-                  AND domain = 'ref'
-                  AND entity_type IN ('object','facility')
-                """, p);
+            DELETE FROM incident.context_refs
+            WHERE incident_id = :incidentId AND domain = 'ref'
+              AND entity_type IN ('object','facility')
+            """, p);
 
             if (!clear) {
                 var names = jdbc.queryForList(
@@ -87,14 +81,14 @@ public class IncidentCardFields {
                 String name = names.get(0);
                 p.addValue("name", name);
                 jdbc.update("""
-                    INSERT INTO incident.context_refs
-                        (incident_id, domain, entity_type, entity_id, is_primary, entity_name_snapshot)
-                    SELECT :incidentId, 'ref', 'object', :facilityId,
-                           NOT EXISTS (SELECT 1 FROM incident.context_refs
-                                       WHERE incident_id = :incidentId
-                                         AND domain = 'ref' AND is_primary),
-                           :name
-                    """, p);
+                INSERT INTO incident.context_refs
+                    (incident_id, domain, entity_type, entity_id, is_primary, entity_name_snapshot)
+                SELECT :incidentId, 'ref', 'object', :facilityId,
+                       NOT EXISTS (SELECT 1 FROM incident.context_refs
+                                   WHERE incident_id = :incidentId
+                                     AND domain = 'ref' AND is_primary),
+                       :name
+                """, p);
             }
 
             var metadata = new HashMap<String, Object>();
@@ -102,8 +96,8 @@ public class IncidentCardFields {
             metadata.remove("objectId"); metadata.remove("facilityId");
             metadata.remove("siteName"); metadata.remove("facilityName");
             if (!clear) {
-                metadata.put("objectId", req.facilityId().toString());
-                metadata.put("facilityId", req.facilityId().toString());
+                metadata.put("objectId", resolvedObjectId.toString());
+                metadata.put("facilityId", resolvedObjectId.toString());   // legacy alias
             }
             incident.setMetadata(metadata);
         }

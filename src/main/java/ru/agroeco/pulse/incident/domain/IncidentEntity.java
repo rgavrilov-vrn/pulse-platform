@@ -118,4 +118,10 @@ public class IncidentEntity {
         if (id == null) id = UUID.randomUUID();
         if (metadata == null) metadata = Map.of();
     }
+
+    /** FIX #120: защита от `null` metadata при update. */
+    @PreUpdate
+    void preUpdate() {
+        if (metadata == null) metadata = Map.of();
+    }
 }

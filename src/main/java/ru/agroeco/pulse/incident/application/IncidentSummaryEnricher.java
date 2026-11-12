@@ -88,11 +88,9 @@ public class IncidentSummaryEnricher {
 
         return rows.stream().map(row -> {
             var l = byId.get(row.id());
-            IncidentKind kind = null;
-            if (l != null && l.groupCode() != null) {
-                try { kind = IncidentKind.fromGroupCode(l.groupCode()); }
-                catch (IllegalArgumentException ignored) { /* неизвестная группа */ }
-            }
+            IncidentKind kind = (l != null)
+                    ? IncidentKind.fromGroupCodeOrNull(l.groupCode())
+                    : null;
             return new IncidentSummary(
                     row.id(), row.number(), row.source(), row.creationMode(),
                     row.status(), row.severity(),

@@ -79,14 +79,6 @@ app:
     topic:
       video-events: pulse.videoserver.events
       incident-events: pulse.incident.events
-      # notification-requests / notification-status удалены:
-      # модуля уведомлений в коде нет (FIX #13).
-    consumer:
-      group-id: pulse-incident      # FIX #56: используется в @KafkaListener
-
-  incident:
-    # FIX #57: UUID __system__ из миграций. Переопределяемо для multi-tenant.
-    system-user-id: "00000000-0000-0000-0000-000000000001"
 
   outbox:
     relay-enabled: true
@@ -94,17 +86,10 @@ app:
     max-attempts: 5
     relay-interval-ms: 5000
     default-topic: pulse.events
-    # FIX #12, #13: ключи должны точно совпадать с DomainEvent.outboxEventType().
-    #   * IncidentCreated — override → "IncidentCreated" (PascalCase);
-    #   * остальные — DomainEventType.getValue() (UPPER_SNAKE_CASE).
-    # Убраны несуществующие: IncidentAssigned / IncidentConfirmed /
-    # IncidentRejected / IncidentClosed / VideoEventNormalized /
-    # NotificationRequested / NotificationStatus.
-    #
-    # Рекомендация: удалить override в IncidentCreated.outboxEventType(),
-    # чтобы ВСЕ ключи стали UPPER_SNAKE_CASE (INCIDENT_CREATED).
+    # FIX #12: все ключи в UPPER_SNAKE_CASE.
+    # `IncidentCreated` → `INCIDENT_CREATED` (override outboxEventType() удалён).
     event-topics:
-      IncidentCreated:               ${app.kafka.topic.incident-events}
+      INCIDENT_CREATED:              ${app.kafka.topic.incident-events}
       INCIDENT_STATUS_CHANGED:       ${app.kafka.topic.incident-events}
       INCIDENT_COMMENT_ADDED:        ${app.kafka.topic.incident-events}
       INCIDENT_UPDATED:              ${app.kafka.topic.incident-events}
@@ -116,9 +101,6 @@ app:
       VIDEO_EVENT_INGESTED:          ${app.kafka.topic.video-events}
 
   cors:
-    # FIX #39: убран YAML-дефис. Spring Boot разбивает скаляр по запятой
-    # в List<String> автоматически; с дефисом получался список из ОДНОГО
-    # элемента — "http://localhost:5173,http://..." (CORS preflight падал).
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173}
 
   security:
@@ -127,12 +109,22 @@ app:
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
       issuer: ${JWT_ISSUER:pulse-platform}
       audience: ${JWT_AUDIENCE:pulse-api}
-      # FIX #48: как часто удалять истёкшие записи revoked_jti (мс, 1 час).
       revocation-cleanup-ms: 3600000
-    # FIX #42: rate-limit на /api/v1/auth/token (по IP).
     login-rate-limit:
       max-attempts: 10
       window: PT5M
+    auth:
+      role-assignment:
+        protected-roles:
+          - SUPERUSER
+          - ADMIN
+        protected-role-authority: system:admin
+    # FIX #87: bootstrap по умолчанию выключен. Включается явно:
+    #   BOOTSTRAP_ENABLED=true + BOOTSTRAP_USERNAME + BOOTSTRAP_PASSWORD
+    bootstrap:
+      enabled: ${BOOTSTRAP_ENABLED:false}
+      username: ${BOOTSTRAP_USERNAME:}
+      password: ${BOOTSTRAP_PASSWORD:}
 
   auth:
     role-assignment:
@@ -160,8 +152,12 @@ management:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    # FIX #90: по умолчанию включено (для local); в prod переопределяется
+    # через application-prod.yml (см. ниже) или env SPRINGDOC_API_DOCS_ENABLED=false.
+    enabled: ${SPRINGDOC_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${SPRINGDOC_ENABLED:true}
 
 logging:
   level:

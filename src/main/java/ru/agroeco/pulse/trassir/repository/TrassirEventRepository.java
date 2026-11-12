@@ -14,9 +14,11 @@ import java.util.UUID;
 public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID> {
 
     /**
-     * FIX #27: идемпотентная вставка события. Если event_id уже есть
-     * (агент потерял state и выслал новый batch с теми же событиями) —
-     * пропускаем без ошибки.
+     * Идемпотентная вставка события (FIX #27, партия 3).
+     * Если event_id уже есть — пропускаем без ошибки.
+     *
+     * ВАЖНО: этот метод был случайно удалён при переписывании репозитория
+     * в партии 7 (FIX #137) — восстановлен.
      */
     @Modifying
     @Query(value = """
@@ -42,41 +44,33 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
                        @Param("data") String data,
                        @Param("rawEvent") String rawEvent);
 
+    /**
+     * FIX #137: без FOR UPDATE. Раньше lockProcessable (FOR UPDATE SKIP LOCKED)
+     * удерживал блокировки в outer-транзакции, а REQUIRES_NEW retry-worker'а
+     * пытался UPDATE те же строки — deadlock. Конкурентность ограничивается
+     * pg_try_advisory_xact_lock в TrassirEventProcessor.processById.
+     */
+    @Query(value = """
+        SELECT * FROM trassir.events
+        WHERE (status = 'FAILED' AND next_retry_at <= :now)
+           OR (status = 'PENDING' AND created_at <= :staleCutoff)
+        ORDER BY COALESCE(next_retry_at, created_at), id
+        LIMIT 50
+        """, nativeQuery = true)
+    List<TrassirEvent> findProcessableCandidates(@Param("now") Instant now,
+                                                 @Param("staleCutoff") Instant staleCutoff);
 
-
-    Optional<TrassirEvent> findById(UUID id);
+    @Query(value = "SELECT pg_try_advisory_xact_lock(hashtext(:key))", nativeQuery = true)
+    Boolean tryAdvisoryLock(@Param("key") String key);
 
     @Modifying
-    @Query("delete from TrassirEvent event where event.createdAt < :cutoff and event.status in ('PROCESSED', 'DEAD_LETTER')")
+    @Query("delete from TrassirEvent event where event.createdAt < :cutoff and event.status in ('PROCESSED','DEAD_LETTER')")
     int deleteFinishedOlderThan(@Param("cutoff") Instant cutoff);
 
     @Modifying
     @Query("delete from TrassirEvent event")
     int deleteAllEvents();
 
-    /** FIX #17, #77: только ID кандидатов — БЕЗ FOR UPDATE. */
-    @Query(value = """
-    SELECT id FROM trassir.events
-    WHERE (status = 'FAILED' AND next_retry_at <= :now)
-       OR (status = 'PENDING' AND created_at <= :staleCutoff)
-    ORDER BY COALESCE(next_retry_at, created_at), id
-    LIMIT :limit
-    """, nativeQuery = true)
-    List<UUID> findCandidateIdsForRetry(@Param("now") Instant now,
-                                        @Param("staleCutoff") Instant staleCutoff,
-                                        @Param("limit") int limit);
-
-    /** FIX #17, #77: атомарная блокировка одного события с SKIP LOCKED. */
-    @Query(value = """
-    SELECT * FROM trassir.events
-    WHERE id = :id
-      AND (
-        (status = 'FAILED' AND next_retry_at <= :now)
-        OR (status = 'PENDING' AND created_at <= :staleCutoff)
-      )
-    FOR UPDATE SKIP LOCKED
-    """, nativeQuery = true)
-    Optional<TrassirEvent> lockByIdForRetry(@Param("id") UUID id,
-                                            @Param("now") Instant now,
-                                            @Param("staleCutoff") Instant staleCutoff);
+    @Override
+    Optional<TrassirEvent> findById(UUID id);
 }

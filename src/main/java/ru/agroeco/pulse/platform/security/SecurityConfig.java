@@ -22,6 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import ru.agroeco.pulse.auth.application.RoleAssignmentProperties;
+import ru.agroeco.pulse.platform.api.support.CorrelationIds;
 import ru.agroeco.pulse.platform.application.dto.ErrorResponse;
 import tools.jackson.databind.ObjectMapper;
 
@@ -35,8 +36,6 @@ import java.util.List;
 // FIX #22: регистрируем RoleAssignmentProperties (protected-roles из конфига)
 @EnableConfigurationProperties({CorsProperties.class, RoleAssignmentProperties.class})
 public class SecurityConfig {
-
-    private static final String CORRELATION_ID_MDC_KEY = "correlationId";
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CorsProperties corsProperties;
@@ -138,7 +137,7 @@ public class SecurityConfig {
         res.setContentType(MediaType.APPLICATION_JSON_VALUE);
         var body = new ErrorResponse(
                 Instant.now(), status, code, message,
-                List.of(), null, MDC.get(CORRELATION_ID_MDC_KEY));
+                List.of(), null, CorrelationIds.current());
         mapper.writeValue(res.getOutputStream(), body);
     }
 }
