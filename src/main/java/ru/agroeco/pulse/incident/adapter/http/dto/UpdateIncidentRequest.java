@@ -2,6 +2,8 @@ package ru.agroeco.pulse.incident.adapter.http.dto;
 
 import jakarta.validation.constraints.Size;
 import ru.agroeco.pulse.incident.domain.IncidentSeverity;
+import ru.agroeco.pulse.incident.domain.command.IncidentCardUpdate;
+import ru.agroeco.pulse.incident.domain.command.IncidentCategoryChangeCommand;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 
 import java.time.Instant;
@@ -15,10 +17,10 @@ public record UpdateIncidentRequest(
         @Size(max = 100) String checkpoint,
         IncidentSeverity severity,
 
-        /** FIX #117: каноничное имя. */
+        /** Каноничное имя (FIX #117). */
         UUID objectId,
 
-        /** @deprecated используйте {@link #objectId()}. Оставлено для обратной совместимости клиентов. */
+        /** @deprecated используйте {@link #objectId()}. */
         @Deprecated
         UUID facilityId,
 
@@ -26,11 +28,12 @@ public record UpdateIncidentRequest(
         Boolean replaceCheckpoints,
         UUID expectedCategoryId,
         Integer expectedVersion,
-        @Size(max=1000) List<UUID> expectedCheckpointIds
+        @Size(max = 1000) List<UUID> expectedCheckpointIds
 ) {
     /**
-     * FIX #117: resolved Object ID. Приоритет — objectId; facilityId как fallback
-     * для старых клиентов. Если оба заданы и различаются — 422.
+     * Разрешение objectId/facilityId с проверкой конфликта.
+     * Используется и в {@link #toCardUpdate()}, и (если понадобится)
+     * в других потребителях.
      */
     public UUID resolvedObjectId() {
         if (objectId != null && facilityId != null && !objectId.equals(facilityId)) {
@@ -40,7 +43,25 @@ public record UpdateIncidentRequest(
         return objectId != null ? objectId : facilityId;
     }
 
-    // Backward-compatible constructors (FacilityId теперь на позиции 7)
+    /** Static factory: HTTP-DTO → domain-command. */
+    public IncidentCardUpdate toCardUpdate() {
+        return new IncidentCardUpdate(
+                severity,
+                resolvedObjectId(),
+                Boolean.TRUE.equals(clearFacility));
+    }
+
+    /** Static factory: HTTP-DTO → domain-command. */
+    public IncidentCategoryChangeCommand toCategoryChangeCommand() {
+        return new IncidentCategoryChangeCommand(
+                categoryId,
+                Boolean.TRUE.equals(replaceCheckpoints),
+                expectedCheckpointIds,
+                expectedVersion,
+                expectedCategoryId);
+    }
+
+    // Backward-compatible constructors
     public UpdateIncidentRequest(UUID categoryId, Instant eventTime, String comment, String checkpoint) {
         this(categoryId,eventTime,comment,checkpoint,null,null,null,null,null,null,null,null);
     }

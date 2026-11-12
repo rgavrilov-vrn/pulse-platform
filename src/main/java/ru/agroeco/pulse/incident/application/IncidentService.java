@@ -11,6 +11,8 @@ import ru.agroeco.pulse.incident.adapter.http.dto.*;
 import ru.agroeco.pulse.incident.adapter.persistence.*;
 import ru.agroeco.pulse.incident.domain.*;
 import ru.agroeco.pulse.incident.domain.event.*;
+import ru.agroeco.pulse.incident.domain.service.IncidentCardFields;
+import ru.agroeco.pulse.incident.domain.service.IncidentCategoryChange;
 import ru.agroeco.pulse.platform.api.dto.PageResponse;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
@@ -234,8 +236,11 @@ public class IncidentService {
 
         boolean changingCategory = req.categoryId() != null
                 && !req.categoryId().equals(incident.getCategoryId());
-        if (changingCategory) categoryChange.apply(incident, req, actorId);
-        cardFields.apply(incident, req);
+        if (changingCategory) {
+            categoryChange.apply(incident, req.toCategoryChangeCommand(), actorId);
+        }
+        cardFields.apply(incident, req.toCardUpdate());
+
         if (req.eventTime() != null) incident.setEventTime(req.eventTime());
         if (req.comment() != null) incident.setComment(req.comment().isBlank() ? null : req.comment());
 

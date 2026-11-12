@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.incident.application;
+package ru.agroeco.pulse.incident.domain.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -6,11 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import ru.agroeco.pulse.incident.adapter.http.dto.UpdateIncidentRequest;
 import ru.agroeco.pulse.incident.adapter.persistence.ChecklistItemRepository;
 import ru.agroeco.pulse.incident.adapter.persistence.IncidentChecklistItemRepository;
 import ru.agroeco.pulse.incident.adapter.persistence.ViolationCategoryRepository;
 import ru.agroeco.pulse.incident.domain.*;
+import ru.agroeco.pulse.incident.domain.command.IncidentCategoryChangeCommand;
 import ru.agroeco.pulse.incident.domain.event.IncidentCheckpointRemoved;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
@@ -22,38 +22,42 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class IncidentCategoryChange {
+
     private final ViolationCategoryRepository categories;
     private final IncidentChecklistItemRepository links;
     private final ChecklistItemRepository items;
     private final EventDispatcher events;
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void apply(IncidentEntity incident, UpdateIncidentRequest req, UUID actor) {
-        var target = categories.findById(req.categoryId()).filter(ViolationCategoryEntity::isActive)
-                .orElseThrow(() -> new BusinessRuleException("Категория не найдена или неактивна"));
+    public void apply(IncidentEntity incident, IncidentCategoryChangeCommand cmd, UUID actor) {
+        var target = categories.findById(cmd.newCategoryId())
+                .filter(ViolationCategoryEntity::isActive)
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Категория не найдена или неактивна"));
+
         var current = links.findByIncidentIdAndDeletedFalseOrderByCreatedAtDesc(incident.getId());
-        boolean confirmed = Boolean.TRUE.equals(req.replaceCheckpoints());
+        boolean confirmed = cmd.replaceCheckpoints();
 
         if (confirmed) {
             if (incident.getStatus() != IncidentStatus.DRAFT) {
                 throw new BusinessRuleException(
                         "Подтверждаемая смена категории доступна только в черновике");
             }
-            var expected = req.expectedCheckpointIds();
+            var expected = cmd.expectedCheckpointIds();
             var actual = new HashSet<>(current.stream()
                     .map(IncidentChecklistItemEntity::getId).toList());
-            if (req.expectedVersion() == null
-                    || !Objects.equals(req.expectedVersion(), incident.getVersion())
-                    || !Objects.equals(req.expectedCategoryId(), incident.getCategoryId())
+            if (cmd.expectedVersion() == null
+                    || !Objects.equals(cmd.expectedVersion(), incident.getVersion())
+                    || !Objects.equals(cmd.expectedCategoryId(), incident.getCategoryId())
                     || expected == null
                     || expected.stream().anyMatch(Objects::isNull)
                     || expected.size() != new HashSet<>(expected).size()
                     || !actual.equals(new HashSet<>(expected))) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Карточка или привязки изменились. Обновите карточку и подтвердите смену категории заново.");
+                        "Карточка или привязки изменились. Обновите карточку и "
+                                + "подтвердите смену категории заново.");
             }
         } else {
-            // FIX #63: N+1 → один запрос по списку itemIds.
             Set<UUID> itemIds = current.stream()
                     .map(IncidentChecklistItemEntity::getChecklistItemId)
                     .collect(Collectors.toSet());
@@ -61,7 +65,8 @@ public class IncidentCategoryChange {
                     ? Map.of()
                     : items.findAllById(itemIds).stream()
                     .collect(Collectors.toMap(
-                            ChecklistItemEntity::getId, ChecklistItemEntity::getCategoryId));
+                            ChecklistItemEntity::getId,
+                            ChecklistItemEntity::getCategoryId));
             boolean foreign = current.stream().anyMatch(link -> {
                 UUID catId = categoryByItem.get(link.getChecklistItemId());
                 return catId == null || !target.getId().equals(catId);
@@ -72,7 +77,8 @@ public class IncidentCategoryChange {
                             && !incident.getMetadata().get(k).toString().isBlank());
             if (foreign || legacy) {
                 throw new BusinessRuleException(
-                        "Подтвердите смену категории и снятие прежних привязок контрольных точек");
+                        "Подтвердите смену категории и снятие прежних привязок "
+                                + "контрольных точек");
             }
         }
 
@@ -97,7 +103,8 @@ public class IncidentCategoryChange {
 
         var metadata = new HashMap<String, Object>();
         if (incident.getMetadata() != null) metadata.putAll(incident.getMetadata());
-        metadata.remove("checkpoint"); metadata.remove("checklistItemId");
+        metadata.remove("checkpoint");
+        metadata.remove("checklistItemId");
         metadata.remove("checklistItemName");
         incident.setMetadata(metadata);
         incident.setCategoryId(target.getId());

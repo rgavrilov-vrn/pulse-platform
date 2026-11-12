@@ -1,51 +1,36 @@
-package ru.agroeco.pulse.incident.application.report;
+package ru.agroeco.pulse.incident.adapter.http.report;
 
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.*;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import tools.jackson.databind.JsonNode;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.io.*;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import static ru.agroeco.pulse.incident.adapter.http.report.ObjectReportController.Entry;
-import static ru.agroeco.pulse.incident.adapter.http.report.ObjectReportController.Filter;
+import static ru.agroeco.pulse.incident.adapter.http.report.ObjectReportController.*;
 
 final class ObjectReportFiles {
-    private static final ZoneId ZONE = ZoneId.of("Europe/Moscow");
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss").withZone(ZONE);
-    private ObjectReportFiles() {
-    }
+    private ObjectReportFiles() {}
 
-    private static String value(Object v) {
-        return v == null ? "" : v.toString();
-    }
+    private static final ZoneId ZONE = ZoneId.of("Europe/Moscow");
+    private static final DateTimeFormatter TIME =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss").withZone(ZONE);
+
+    private static String value(Object v) { return v == null ? "" : v.toString(); }
 
     private static String field(JsonNode n, String key) {
         JsonNode v = n.get(key);
         return v == null || v.isNull() ? "" : v.asString();
     }
 
-    private static String time(Instant v) {
-        return v == null ? "—" : TIME.format(v);
-    }
+    private static String time(Instant v) { return v == null ? "—" : TIME.format(v); }
 
-    private static String kind(String v) {
-        return "VIOLATION".equals(v) ? "Нарушение" : "Событие";
-    }
+    private static String kind(String v) { return "VIOLATION".equals(v) ? "Нарушение" : "Событие"; }
 
     private static String status(String v) {
         return switch (value(v)) {
@@ -76,34 +61,50 @@ final class ObjectReportFiles {
             wrap.setVerticalAlignment(VerticalAlignment.TOP);
             var dates = wb.createCellStyle();
             dates.setDataFormat(wb.createDataFormat().getFormat("dd.mm.yyyy hh:mm:ss"));
-            Sheet main = wb.createSheet("Записи"), comments = wb.createSheet("Комментарии"), params = wb.createSheet("Параметры");
-            row(main, header, "Объект", "Номер", "Время события (МСК)", "Зарегистрировано (МСК)", "Тип", "Категория", "Контрольные точки", "Статус", "Оператор", "Комментарий", "Причина отмены", "Комментарий закрытия");
+            Sheet main = wb.createSheet("Записи"),
+                    comments = wb.createSheet("Комментарии"),
+                    params = wb.createSheet("Параметры");
+            row(main, header, "Объект", "Номер", "Время события (МСК)", "Зарегистрировано (МСК)",
+                    "Тип", "Категория", "Контрольные точки", "Статус", "Оператор",
+                    "Комментарий", "Причина отмены", "Комментарий закрытия");
             row(comments, header, "Номер", "Источник", "Время (МСК)", "Автор", "Текст", "Часть");
             for (var e : entries) {
                 var names = new ArrayList<String>();
                 for (var p : e.points()) names.add(field(p, "name"));
-                Row r = row(main, wrap, e.objectName(), e.number(), "", "", kind(e.kind()), e.category(), String.join("; ", names), status(e.status()), e.operatorName(), e.initialComment(), e.cancellationReason(), e.resolutionComment());
+                Row r = row(main, wrap, e.objectName(), e.number(), "", "",
+                        kind(e.kind()), e.category(), String.join("; ", names),
+                        status(e.status()), e.operatorName(), e.initialComment(),
+                        e.cancellationReason(), e.resolutionComment());
                 date(r.getCell(2), e.eventTime(), dates);
                 date(r.getCell(3), e.createdAt(), dates);
-                comment(comments, wrap, dates, e.number(), "Исходный комментарий", e.createdAt(), e.operatorName(), e.initialComment());
+                comment(comments, wrap, dates, e.number(), "Исходный комментарий",
+                        e.createdAt(), e.operatorName(), e.initialComment());
                 for (var p : e.points())
-                    comment(comments, wrap, dates, e.number(), "Контрольная точка: " + field(p, "name"), null, "", field(p, "comment").isBlank() ? "Без комментария" : field(p, "comment"));
+                    comment(comments, wrap, dates, e.number(),
+                            "Контрольная точка: " + field(p, "name"), null, "",
+                            field(p, "comment").isBlank() ? "Без комментария" : field(p, "comment"));
                 for (var c : e.comments())
-                    comment(comments, wrap, dates, e.number(), field(c, "source"), instant(field(c, "occurredAt")), field(c, "author"), field(c, "text"));
-                comment(comments, wrap, dates, e.number(), "Причина отмены", null, "", e.cancellationReason());
-                comment(comments, wrap, dates, e.number(), "Комментарий закрытия", null, "", e.resolutionComment());
+                    comment(comments, wrap, dates, e.number(), field(c, "source"),
+                            instant(field(c, "occurredAt")), field(c, "author"), field(c, "text"));
+                comment(comments, wrap, dates, e.number(), "Причина отмены", null, "",
+                        e.cancellationReason());
+                comment(comments, wrap, dates, e.number(), "Комментарий закрытия", null, "",
+                        e.resolutionComment());
             }
             row(params, header, "Параметр", "Значение");
             row(params, wrap, "Сформировано (МСК)", time(Instant.now()));
             row(params, wrap, "Всего записей", entries.size());
             row(params, wrap, "Фильтры", filter);
-            row(params, wrap, "Примечание", "Полные комментарии и контрольные точки — на листе Комментарии. Даты — МСК.");
+            row(params, wrap, "Примечание",
+                    "Полные комментарии и контрольные точки — на листе Комментарии. Даты — МСК.");
             for (Sheet sh : List.of(main, comments, params)) {
                 sh.createFreezePane(0, 1);
                 int cols = sh.getRow(0).getLastCellNum();
-                sh.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0, sh.getLastRowNum(), 0, cols - 1));
+                sh.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
+                        0, sh.getLastRowNum(), 0, cols - 1));
                 for (int n = 0; n < cols; n++)
-                    sh.setColumnWidth(n, ((sh == comments && n == 4) || (sh == params && n == 1) ? 70 : 25) * 256);
+                    sh.setColumnWidth(n, ((sh == comments && n == 4)
+                            || (sh == params && n == 1) ? 70 : 25) * 256);
             }
             wb.write(output);
             return output.toByteArray();
@@ -115,7 +116,9 @@ final class ObjectReportFiles {
         for (int n = 0; n < values.length; n++) {
             Cell c = r.createCell(n);
             String s = value(values[n]);
-            c.setCellValue(s.length() > 32767 ? s.substring(0, 32600) + " … Полные данные — на листе Комментарии" : s);
+            c.setCellValue(s.length() > 32767
+                    ? s.substring(0, 32600) + " … Полные данные — на листе Комментарии"
+                    : s);
             c.setCellStyle(style);
         }
         return r;
@@ -128,7 +131,9 @@ final class ObjectReportFiles {
         }
     }
 
-    private static void comment(Sheet sh, CellStyle wrap, CellStyle dates, String number, String source, Instant at, String author, String text) {
+    private static void comment(Sheet sh, CellStyle wrap, CellStyle dates,
+                                String number, String source, Instant at,
+                                String author, String text) {
         if (text == null || text.isBlank()) return;
         int part = 1;
         for (int p = 0; p < text.length(); ) {
@@ -141,7 +146,10 @@ final class ObjectReportFiles {
     }
 
     static byte[] pdf(List<Entry> entries, Filter filter) throws IOException {
-        try (var doc = new PDDocument(); var input = PDDocument.class.getResourceAsStream("/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf"); var output = new ByteArrayOutputStream()) {
+        try (var doc = new PDDocument();
+             var input = PDDocument.class.getResourceAsStream(
+                     "/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf");
+             var output = new ByteArrayOutputStream()) {
             if (input == null) throw new IOException("PDF font resource is missing");
             var font = PDType0Font.load(doc, input, true);
             try (var writer = new PdfWriter(doc, font)) {
@@ -155,16 +163,26 @@ final class ObjectReportFiles {
                     writer.line("Объект: " + group.getKey(), 14);
                     for (var e : group.getValue()) {
                         writer.line(e.number() + " · " + kind(e.kind()) + " · " + status(e.status()), 12);
-                        writer.line("Событие: " + time(e.eventTime()) + " МСК; регистрация: " + time(e.createdAt()) + " МСК", 10);
-                        writer.line("Оператор: " + value(e.operatorName()) + "; категория: " + value(e.category()), 10);
-                        if (e.points().isEmpty()) writer.line("Контрольная точка: не указана", 10);
+                        writer.line("Событие: " + time(e.eventTime()) + " МСК; регистрация: "
+                                + time(e.createdAt()) + " МСК", 10);
+                        writer.line("Оператор: " + value(e.operatorName())
+                                + "; категория: " + value(e.category()), 10);
+                        if (e.points().isEmpty())
+                            writer.line("Контрольная точка: не указана", 10);
                         for (var p : e.points())
-                            writer.line("Контрольная точка: " + field(p, "name") + (field(p, "comment").isBlank() ? "" : ". " + field(p, "comment")), 10);
-                        writer.line("Исходный комментарий: " + (value(e.initialComment()).isBlank() ? "не указан" : e.initialComment()), 10);
+                            writer.line("Контрольная точка: " + field(p, "name")
+                                    + (field(p, "comment").isBlank() ? "" : ". " + field(p, "comment")), 10);
+                        writer.line("Исходный комментарий: "
+                                + (value(e.initialComment()).isBlank() ? "не указан" : e.initialComment()), 10);
                         for (var c : e.comments())
-                            writer.line(time(instant(field(c, "occurredAt"))) + " · " + field(c, "author") + " · " + field(c, "source") + ": " + field(c, "text"), 9);
-                        if (!value(e.cancellationReason()).isBlank() || "CANCELLED".equals(e.status()))
-                            writer.line("Причина отмены: " + (value(e.cancellationReason()).isBlank() ? "не указана" : e.cancellationReason()), 10);
+                            writer.line(time(instant(field(c, "occurredAt"))) + " · "
+                                    + field(c, "author") + " · " + field(c, "source")
+                                    + ": " + field(c, "text"), 9);
+                        if (!value(e.cancellationReason()).isBlank()
+                                || "CANCELLED".equals(e.status()))
+                            writer.line("Причина отмены: "
+                                    + (value(e.cancellationReason()).isBlank()
+                                    ? "не указана" : e.cancellationReason()), 10);
                         if (!value(e.resolutionComment()).isBlank())
                             writer.line("Комментарий закрытия: " + e.resolutionComment(), 10);
                         writer.line(" ", 8);
@@ -172,14 +190,16 @@ final class ObjectReportFiles {
                 }
             }
             int count = doc.getNumberOfPages();
-            for (int n = 0; n < count; n++)
-                try (var cs = new PDPageContentStream(doc, doc.getPage(n), PDPageContentStream.AppendMode.APPEND, true, true)) {
+            for (int n = 0; n < count; n++) {
+                try (var cs = new PDPageContentStream(doc, doc.getPage(n),
+                        PDPageContentStream.AppendMode.APPEND, true, true)) {
                     cs.beginText();
                     cs.setFont(font, 9);
                     cs.newLineAtOffset(40, 25);
                     cs.showText("Страница " + (n + 1) + " из " + count);
                     cs.endText();
                 }
+            }
             doc.save(output);
             return output.toByteArray();
         }
@@ -207,16 +227,15 @@ final class ObjectReportFiles {
         void line(String text, float size) throws IOException {
             StringBuilder safe = new StringBuilder();
             for (int cp : text.replace('\t', ' ').codePoints().toArray()) {
-                if (cp == '\n') {
-                    safe.append('\n');
-                    continue;
-                }
+                if (cp == '\n') { safe.append('\n'); continue; }
                 if (Character.isISOControl(cp)) continue;
                 String ch = new String(Character.toChars(cp));
                 try {
                     font.encode(ch);
                     safe.append(ch);
                 } catch (IllegalArgumentException ex) {
+                    // FIX #121: явная маркировка «символ не отображён»,
+                    // чтобы в PDF не было неотличимого от текста «?».
                     safe.append("[?]");
                 }
             }
@@ -224,7 +243,8 @@ final class ObjectReportFiles {
                 StringBuilder line = new StringBuilder();
                 for (int cp : paragraph.codePoints().toArray()) {
                     String ch = new String(Character.toChars(cp));
-                    if (line.length() > 0 && font.getStringWidth(line + ch) * size / 1000 > 510) {
+                    if (line.length() > 0
+                            && font.getStringWidth(line.toString() + ch) * size / 1000 > 510) {
                         int space = line.lastIndexOf(" ");
                         if (space > 0) {
                             draw(line.substring(0, space), size);

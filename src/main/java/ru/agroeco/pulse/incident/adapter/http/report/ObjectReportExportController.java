@@ -8,7 +8,6 @@ import org.springframework.http.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.web.server.ResponseStatusException;
-import ru.agroeco.pulse.incident.application.report.ObjectReportFiles;
 import ru.agroeco.pulse.incident.domain.event.ObjectReportExported;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.security.AppPrincipal;
