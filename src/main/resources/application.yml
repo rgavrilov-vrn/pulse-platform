@@ -123,12 +123,17 @@ app:
 
   security:
     jwt:
-      # FIX #33: секрет БЕЗ дефолта — fail-fast, если JWT_SECRET не задан.
-      # Для local — см. application-local.yml.
       secret: ${JWT_SECRET}
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
       issuer: ${JWT_ISSUER:pulse-platform}
       audience: ${JWT_AUDIENCE:pulse-api}
+      # FIX #48: как часто удалять истёкшие записи revoked_jti (мс, 1 час).
+      revocation-cleanup-ms: 3600000
+    # FIX #42: rate-limit на /api/v1/auth/token (по IP).
+    login-rate-limit:
+      max-attempts: 10
+      window: PT5M
+
   auth:
     role-assignment:
       # FIX #22: выдача этих ролей требует authority system:admin.

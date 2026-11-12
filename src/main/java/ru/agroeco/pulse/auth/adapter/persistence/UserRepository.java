@@ -21,13 +21,21 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     })
     Optional<UserEntity> findByLogin(String login);
 
+    /**
+     * FIX #44: загрузка с authorities по id (для loadUserById).
+     * Без @EntityGraph будет N+1 (roles → role → permissions → permission).
+     */
+    @EntityGraph(attributePaths = {
+            "roles",
+            "roles.role",
+            "roles.role.permissions",
+            "roles.role.permissions.permission"
+    })
+    @Query("SELECT u FROM UserEntity u WHERE u.id = :id")
+    Optional<UserEntity> findByIdWithAuthorities(@Param("id") UUID id);
+
     boolean existsByLogin(String login);
 
-    /**
-     * Поиск для админского списка. Без {@code @EntityGraph} — роли
-     * догружаются отдельным батч-запросом в сервисе,
-     * чтобы избежать cartesian product с {@code Pageable}.
-     */
     @Query("""
             SELECT u FROM UserEntity u
             WHERE (:enabled IS NULL OR u.active = :enabled)

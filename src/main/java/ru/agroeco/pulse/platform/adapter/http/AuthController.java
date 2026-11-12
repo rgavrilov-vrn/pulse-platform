@@ -22,6 +22,7 @@ import ru.agroeco.pulse.platform.application.dto.TokenResponse;
 import ru.agroeco.pulse.platform.domain.event.UserAuthenticated;
 import ru.agroeco.pulse.platform.security.AppPrincipal;
 import ru.agroeco.pulse.platform.security.JwtService;
+import ru.agroeco.pulse.platform.security.TokenRevocationPort;
 
 import java.time.Instant;
 
@@ -36,13 +37,10 @@ public class AuthController {
     private final JwtService jwtService;
     private final ApplicationEventPublisher eventPublisher;
     private final LoginAuditService loginAuditService;
+    private final TokenRevocationPort revocation;   // FIX #48
 
     @PostMapping("/token")
     @Operation(summary = "Issue JWT access token")
-    // FIX #15: @Transactional нужен, чтобы @TransactionalEventListener
-    // (AuditEventListener.on, NotificationEventListener.on) сработали.
-    // Без транзакции AFTER_COMMIT-слушатели молчат → успешные логины
-    // не аудируются.
     @Transactional
     public ResponseEntity<TokenResponse> token(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -64,7 +62,6 @@ public class AuthController {
                             request.username(), request.password()));
 
             AppPrincipal principal = (AppPrincipal) authentication.getPrincipal();
-
             String token = jwtService.generateToken(principal);
             long ttl = jwtService.expirationSeconds();
 
@@ -74,8 +71,6 @@ public class AuthController {
             return ResponseEntity.ok(new TokenResponse(token, "Bearer", ttl));
 
         } catch (AuthenticationException ex) {
-            // FIX #46: ошибка аудита не должна маскировать исходную
-            // AuthenticationException (иначе 401 превращается в 500).
             try {
                 loginAuditService.recordFailure(request.username(),
                         ex.getClass().getSimpleName());
@@ -85,5 +80,28 @@ public class AuthController {
             }
             throw ex;
         }
+    }
+
+    /**
+     * FIX #48: отзыв текущего токена. Идемпотентно — повторный logout
+     * на уже отозванном токене вернёт 204. Эндпоинт permitAll в SecurityConfig
+     * (см. SecurityConfig) — фильтр всё равно не пустит с отозванным токеном,
+     * но это не ошибка logout'а.
+     */
+    @PostMapping("/logout")
+    @Operation(summary = "Revoke current access token")
+    public ResponseEntity<Void> logout(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader != null && authHeader.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            String token = authHeader.substring(7);
+            try {
+                String jti = jwtService.extractJti(token);
+                Instant expiresAt = jwtService.extractExpiration(token);
+                revocation.revoke(jti, expiresAt, "LOGOUT");
+            } catch (Exception e) {
+                log.debug("Cannot parse token for logout: {}", e.getMessage());
+            }
+        }
+        return ResponseEntity.noContent().build();
     }
 }

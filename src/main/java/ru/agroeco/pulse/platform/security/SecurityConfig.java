@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(
                                 "/api/v1/auth/token",
+                                "/api/v1/auth/logout",           // FIX #48: идемпотентный logout
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
