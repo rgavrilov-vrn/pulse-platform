@@ -22,12 +22,10 @@ public class IncidentSummaryEnricher {
                   String groupCode, List<String> checkpointNames) {}
 
     /**
-     * FIX #61: убран legacy metadata fallback (siteName/facilityId/objectId
-     * из incidents.metadata). Единственный источник — incident.context_refs
-     * (для инцидентов с миграции V09+) + ref.objects. Старые записи без
-     * context_refs получат 'Площадка не определена'.
-     * FIX #62: category_name и group_code вытягиваются здесь же, чтобы
-     * IncidentService.toSummary не делал N+1 через deriveKind/categoryName.
+     * FIX: min(entity_id::text)::uuid — в PostgreSQL нет min(uuid).
+     * Приведение к тексту делает UUID сортируемыми лексикографически,
+     * обратное приведение — чтобы JOIN с ref.objects.id (uuid) не требовал
+     * неявного каста (PostgreSQL его в ON ... = ... не делает).
      */
     private static final String SQL = """
         SELECT i.id,
@@ -51,7 +49,7 @@ public class IncidentSummaryEnricher {
         LEFT JOIN incident.category_groups cg ON cg.id = vc.group_id
         LEFT JOIN ref.objects o ON o.id = (
           SELECT CASE WHEN count(DISTINCT cr.entity_id) = 1
-                      THEN min(cr.entity_id) END
+                      THEN min(cr.entity_id::text)::uuid END
           FROM incident.context_refs cr
           WHERE cr.incident_id = i.id
             AND cr.domain = 'ref'
@@ -94,11 +92,11 @@ public class IncidentSummaryEnricher {
             return new IncidentSummary(
                     row.id(), row.number(), row.source(), row.creationMode(),
                     row.status(), row.severity(),
-                    kind,                                             // FIX #62
+                    kind,
                     row.eventTime(), row.createdAt(), row.updatedAt(),
                     row.assignedTo(), row.comment(),
                     row.categoryId(),
-                    l != null ? l.categoryName() : row.categoryName(),// FIX #62
+                    l != null ? l.categoryName() : row.categoryName(),
                     l == null ? "Площадка не определена" : l.siteName(),
                     l == null ? "Автор не определён"      : l.authorName(),
                     l == null ? List.of()                 : l.checkpointNames());

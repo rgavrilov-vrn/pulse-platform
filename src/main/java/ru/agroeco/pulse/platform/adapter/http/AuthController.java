@@ -45,21 +45,7 @@ public class AuthController {
     @Operation(summary = "Issue JWT access token")
     @Transactional
     public ResponseEntity<TokenResponse> token(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    required = true,
-                    description = "Учётные данные",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = TokenRequest.class),
-                            // FIX #92: вместо реальных credentials — плейсхолдеры.
-                            // Раньше в Swagger был виден работающий admin/admin.
-                            examples = @ExampleObject(
-                                    name = "example",
-                                    summary = "Credentials (obtain in local environment)",
-                                    value = "{\"username\":\"<username>\",\"password\":\"<password>\"}"
-                            )
-                    )
-            ) @Valid @RequestBody TokenRequest request) {
+            @Valid @RequestBody TokenRequest request) {
         try {
             var authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
