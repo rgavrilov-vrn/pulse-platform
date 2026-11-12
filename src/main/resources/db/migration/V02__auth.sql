@@ -1,6 +1,4 @@
 -- V02__auth.sql
--- Пользователи, роли, назначения ролей. Без RBAC-каталога (см. V03).
-
 SET search_path = pg_catalog, public;
 
 CREATE TABLE auth.users (
@@ -33,7 +31,16 @@ CREATE TABLE auth.user_roles (
 
 CREATE INDEX ix_user_roles_role ON auth.user_roles (role_id);
 
--- Триггер updated_at для auth.users
+-- Отзыв JWT до истечения exp (FIX #48, бывший V18)
+CREATE TABLE auth.revoked_jti (
+                                  jti         VARCHAR(64)  PRIMARY KEY,
+                                  expires_at  TIMESTAMPTZ  NOT NULL,
+                                  revoked_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+                                  reason      VARCHAR(100)
+);
+CREATE INDEX ix_revoked_jti_expires_at ON auth.revoked_jti (expires_at);
+
+-- Триггер updated_at
 CREATE OR REPLACE FUNCTION public.tg_set_updated_at()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at := now(); RETURN NEW; END;
@@ -43,9 +50,9 @@ CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
 
-COMMENT ON TABLE  auth.users IS
-    'Пользователи. System user (id=…0001) — атрибуция автоматических действий, пароль заблокирован (''!'').';
+COMMENT ON TABLE  auth.users      IS 'Пользователи. System user (id=…0001) — атрибуция автоматических действий.';
 COMMENT ON COLUMN auth.users.login         IS 'CITEXT: регистронезависимый. __system__ — резерв.';
-COMMENT ON COLUMN auth.users.password_hash IS 'bcrypt/argon2. ''!'' = locked (matches() бросит IAE — фильтровать в AppUserDetailsService).';
+COMMENT ON COLUMN auth.users.password_hash IS 'bcrypt/argon2. ''!'' = locked.';
 COMMENT ON TABLE  auth.roles               IS 'Роли (RBAC-коды).';
 COMMENT ON TABLE  auth.user_roles          IS 'Пользователь ↔ роль (M:N).';
+COMMENT ON TABLE  auth.revoked_jti         IS 'Отозванные JWT по jti. Cleanup — по expires_at.';

@@ -79,6 +79,8 @@ app:
     topic:
       video-events: pulse.videoserver.events
       incident-events: pulse.incident.events
+      notification-requests: pulse.notification.requests   # ← добавить
+      notification-status:   pulse.notification.status     # ← добавить
 
   outbox:
     relay-enabled: true

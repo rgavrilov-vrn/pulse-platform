@@ -1,6 +1,4 @@
 -- V08__refs_seed.sql
--- Seed: 7 площадок, 7 типовых зон × площадка, 3 подразделения, 8 сотрудников.
-
 SET search_path = pg_catalog, public;
 
 INSERT INTO ref.objects (code, name, description, address, is_active) VALUES

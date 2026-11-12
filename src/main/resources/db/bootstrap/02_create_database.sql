@@ -1,7 +1,7 @@
 -- 02_create_database.sql
 -- Выполняется суперпользователем, подключение к postgres.
 -- CREATE DATABASE нельзя выполнять внутри транзакции.
--- flyway:executeInTransaction=false  (если запускается через Flyway)
+-- flyway:executeInTransaction=false
 
 CREATE DATABASE pulse_platform
     WITH

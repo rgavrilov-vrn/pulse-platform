@@ -1,7 +1,4 @@
 -- V13__trassir.sql
--- Телеметрия TRASSIR: ingest_raw, events, snapshots, objects, admin_audit_log.
--- Одна консистентная схема (включает фиксы 025–033 и 22_1).
-
 SET search_path = pg_catalog, public;
 
 -- ---------- Ingest ----------
@@ -20,7 +17,7 @@ CREATE TABLE trassir.ingest_raw (
 CREATE INDEX ix_trassir_ingest_raw_created_at ON trassir.ingest_raw (created_at);
 CREATE INDEX ix_trassir_ingest_raw_server_id  ON trassir.ingest_raw (server_id);
 
--- ---------- Events (сразу с processing-state и server_id) ----------
+-- ---------- Events ----------
 CREATE TABLE trassir.events (
                                 id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                 raw_id           UUID NOT NULL REFERENCES trassir.ingest_raw(id),
@@ -43,11 +40,11 @@ CREATE TABLE trassir.events (
                                 UNIQUE (raw_id, event_index)
 );
 
-CREATE INDEX ix_trassir_events_raw_id              ON trassir.events (raw_id);
-CREATE INDEX ix_trassir_events_type                ON trassir.events (event_type);
-CREATE INDEX ix_trassir_events_server_id           ON trassir.events (server_id);
-CREATE INDEX ix_trassir_events_status_next_retry   ON trassir.events (status, next_retry_at);
-CREATE INDEX ix_trassir_events_created_at          ON trassir.events (created_at);
+CREATE INDEX ix_trassir_events_raw_id            ON trassir.events (raw_id);
+CREATE INDEX ix_trassir_events_type              ON trassir.events (event_type);
+CREATE INDEX ix_trassir_events_server_id         ON trassir.events (server_id);
+CREATE INDEX ix_trassir_events_status_next_retry ON trassir.events (status, next_retry_at);
+CREATE INDEX ix_trassir_events_created_at        ON trassir.events (created_at);
 
 -- ---------- Snapshots ----------
 CREATE TABLE trassir.snapshot_streams (
@@ -60,19 +57,24 @@ CREATE TABLE trassir.snapshot_streams (
                                           UNIQUE (server_id, stream_id)
 );
 
+-- FIX #30 (бывший V16): stream_id = стабильный идентификатор потока (обычно server_id),
+-- НЕ snapshot UUID. Иначе таблица растёт 1:1 со снапшотами.
+COMMENT ON COLUMN trassir.snapshot_streams.stream_id IS
+    'Стабильный идентификатор потока (обычно server_id). Не snapshot UUID.';
+
 CREATE TABLE trassir.snapshots (
-                                   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                                   external_snapshot_id  UUID NOT NULL UNIQUE,
-                                   server_id             TEXT NOT NULL,
-                                   stream_id             TEXT NOT NULL,
-                                   snapshot_seq          BIGINT NOT NULL,
-                                   total_parts           INTEGER NOT NULL,
-                                   received_at           TIMESTAMPTZ NOT NULL,
-                                   completed_at          TIMESTAMPTZ,
-                                   last_error            TEXT,
-                                   next_retry_at         TIMESTAMPTZ,
-                                   retry_count           INTEGER NOT NULL DEFAULT 0,
-                                   status                VARCHAR(32) NOT NULL DEFAULT 'PENDING'
+                                   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                   external_snapshot_id UUID NOT NULL UNIQUE,
+                                   server_id            TEXT NOT NULL,
+                                   stream_id            TEXT NOT NULL,
+                                   snapshot_seq         BIGINT NOT NULL,
+                                   total_parts          INTEGER NOT NULL,
+                                   received_at          TIMESTAMPTZ NOT NULL,
+                                   completed_at         TIMESTAMPTZ,
+                                   last_error           TEXT,
+                                   next_retry_at        TIMESTAMPTZ,
+                                   retry_count          INTEGER NOT NULL DEFAULT 0,
+                                   status               VARCHAR(32) NOT NULL DEFAULT 'PENDING'
 );
 
 CREATE UNIQUE INDEX ux_trassir_snapshots_external_snapshot_id
@@ -131,10 +133,10 @@ CREATE TABLE trassir.system_events (
 CREATE INDEX ix_trassir_system_events_created_at ON trassir.system_events (created_at);
 
 CREATE TABLE trassir.server_state (
-                                      server_id          TEXT PRIMARY KEY,
-                                      last_heartbeat_at  TIMESTAMPTZ,
-                                      last_snapshot_at   TIMESTAMPTZ,
-                                      updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+                                      server_id         TEXT PRIMARY KEY,
+                                      last_heartbeat_at TIMESTAMPTZ,
+                                      last_snapshot_at  TIMESTAMPTZ,
+                                      updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE trassir.agent_heartbeats (
@@ -142,12 +144,12 @@ CREATE TABLE trassir.agent_heartbeats (
                                           server_id   TEXT NOT NULL,
                                           observed_at TIMESTAMPTZ NOT NULL,
                                           component   TEXT NOT NULL,
-                                          status      TEXT,                             -- nullable (фикс 22_1)
+                                          status      TEXT,
                                           details     JSONB NOT NULL,
                                           created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_trassir_agent_heartbeats_server   ON trassir.agent_heartbeats (server_id, observed_at DESC);
+CREATE INDEX ix_trassir_agent_heartbeats_server ON trassir.agent_heartbeats (server_id, observed_at DESC);
 
 -- ---------- Admin audit ----------
 CREATE TABLE trassir.admin_audit_log (

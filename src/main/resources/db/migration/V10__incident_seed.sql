@@ -1,7 +1,5 @@
 -- V10__incident_seed.sql
--- Seed: источники, группы категорий, категории, чек-листы, матрица переходов.
--- Единственный источник правды для status_transitions (устранена находка #103).
-
+-- Единственный источник правды для status_transitions.
 SET search_path = pg_catalog, public;
 
 INSERT INTO incident.sources (code, name) VALUES
@@ -17,8 +15,8 @@ INSERT INTO incident.category_groups (code, name, icon, sort_order) VALUES
 INSERT INTO incident.violation_categories (group_id, code, name, description, sort_order)
 SELECT g.id, s.code, s.name, s.description, s.sort_order
 FROM (VALUES
-          ('EVENT',     'EVENT_GENERAL',       'Общая',           'Общие события: технические, инфраструктурные, нарушения регламента', 10),
-          ('VIOLATION', 'VIOLATION_BIOSAFETY', 'Биобезопасность', 'Контроль биобезопасности', 10)
+          ('EVENT',     'EVENT_GENERAL',       'Общая',           'Общие события',             10),
+          ('VIOLATION', 'VIOLATION_BIOSAFETY', 'Биобезопасность', 'Контроль биобезопасности',  10)
      ) AS s(group_code, code, name, description, sort_order)
          JOIN incident.category_groups g ON g.code = s.group_code
     ON CONFLICT (code) DO NOTHING;
@@ -52,7 +50,6 @@ FROM (VALUES
          JOIN incident.violation_categories c ON c.code = s.category_code
     ON CONFLICT (code) DO NOTHING;
 
--- Матрица переходов (единственный источник — здесь)
 INSERT INTO incident.status_transitions (from_status, to_status) VALUES
                                                                      ('DRAFT',        'RECORDED'),
                                                                      ('DRAFT',        'CANCELLED'),

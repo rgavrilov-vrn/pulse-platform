@@ -1,6 +1,4 @@
 -- V07__refs.sql
--- Справочники: объекты, зоны, подразделения, сотрудники.
-
 SET search_path = pg_catalog, public;
 
 CREATE TABLE ref.objects (
@@ -27,13 +25,14 @@ CREATE TABLE ref.zones (
                            CONSTRAINT uq_zones_object_code UNIQUE (object_id, code)
 );
 
--- Гарантия, что parent_id — из того же объекта (находка #106)
+-- КРИТИЧНО: сначала UNIQUE на (object_id, id), потом FK на него.
+-- PostgreSQL требует, чтобы ссылаемые колонки имели UNIQUE/PK на весь набор.
+ALTER TABLE ref.zones ADD CONSTRAINT uq_zones_object_id UNIQUE (object_id, id);
+
 ALTER TABLE ref.zones
     ADD CONSTRAINT fk_zones_parent_same_object
         FOREIGN KEY (object_id, parent_id) REFERENCES ref.zones(object_id, id)
             DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE ref.zones ADD CONSTRAINT uq_zones_object_id UNIQUE (object_id, id);
 
 CREATE INDEX ix_zones_parent ON ref.zones (parent_id);
 

@@ -1,6 +1,4 @@
 -- V09__incident.sql
--- Инциденты: справочники домена, нумерация, инцидент, материалы, история.
-
 SET search_path = pg_catalog, public;
 
 -- ---------- Источники ----------
@@ -66,11 +64,11 @@ CREATE TABLE incident.status_transitions (
 CREATE INDEX ix_violation_categories_group ON incident.violation_categories (group_id, sort_order);
 CREATE INDEX ix_checklist_items_category   ON incident.checklist_items (category_id, sort_order) WHERE is_active;
 
-CREATE TRIGGER trg_category_groups_updated_at     BEFORE UPDATE ON incident.category_groups      FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
+CREATE TRIGGER trg_category_groups_updated_at      BEFORE UPDATE ON incident.category_groups      FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
 CREATE TRIGGER trg_violation_categories_updated_at BEFORE UPDATE ON incident.violation_categories FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
-CREATE TRIGGER trg_checklist_items_updated_at     BEFORE UPDATE ON incident.checklist_items      FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
+CREATE TRIGGER trg_checklist_items_updated_at      BEFORE UPDATE ON incident.checklist_items      FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();
 
--- ---------- Нумерация инцидентов ----------
+-- ---------- Нумерация ----------
 CREATE SEQUENCE incident.incident_number_seq START WITH 1 INCREMENT BY 1;
 
 CREATE OR REPLACE FUNCTION incident.generate_incident_number()
@@ -111,6 +109,8 @@ CREATE TABLE incident.incidents (
                                     cancellation_reason  TEXT,
                                     comment              TEXT,
                                     metadata             JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- FIX #58 (бывший V17): идемпотентность integration-инцидентов на уровне БД
+                                    source_event_id      UUID,
                                     CONSTRAINT chk_incidents_version       CHECK (version >= 0),
                                     CONSTRAINT chk_incidents_dates         CHECK (updated_at >= created_at),
                                     CONSTRAINT chk_incidents_due_date      CHECK (due_at IS NULL OR due_at >= created_at),
@@ -118,6 +118,13 @@ CREATE TABLE incident.incidents (
                                     CONSTRAINT chk_incidents_status        CHECK (status IN ('DRAFT','RECORDED','NEEDS_REVIEW','CONFIRMED','REJECTED','CLOSED','CANCELLED','ARCHIVED')),
                                     CONSTRAINT chk_incidents_severity      CHECK (severity IN ('LOW','MEDIUM','HIGH','CRITICAL'))
 );
+
+CREATE UNIQUE INDEX ux_incidents_source_event_id
+    ON incident.incidents (source, source_event_id)
+    WHERE source_event_id IS NOT NULL;
+
+COMMENT ON COLUMN incident.incidents.source_event_id IS
+    'ID события во внешней системе. Unique (source, source_event_id) гарантирует идемпотентность ingest.';
 
 CREATE TRIGGER trg_incidents_updated_at BEFORE UPDATE ON incident.incidents
     FOR EACH ROW EXECUTE FUNCTION public.tg_set_updated_at();

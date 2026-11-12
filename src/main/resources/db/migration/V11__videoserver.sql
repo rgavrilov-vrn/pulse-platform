@@ -1,6 +1,4 @@
 -- V11__videoserver.sql
--- Домен видео. Без FK на ref.*: привязка камер к объектам — через incident.context_refs.
-
 SET search_path = pg_catalog, public;
 
 CREATE TABLE videoserver.video_servers (

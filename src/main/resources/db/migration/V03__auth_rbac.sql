@@ -1,6 +1,4 @@
 -- V03__auth_rbac.sql
--- Каталог пермишенов, привязка к ролям, view/functions для эффективных прав.
-
 SET search_path = pg_catalog, public;
 
 CREATE TABLE auth.permissions (
@@ -11,8 +9,8 @@ CREATE TABLE auth.permissions (
                                   name        VARCHAR(255) NOT NULL,
                                   description TEXT,
                                   created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
-                                  CONSTRAINT chk_permissions_code_format  CHECK (code     ~ '^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$'),
-    CONSTRAINT chk_permissions_code_matches CHECK (code     = resource || ':' || action),
+                                  CONSTRAINT chk_permissions_code_format  CHECK (code ~ '^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$'),
+    CONSTRAINT chk_permissions_code_matches CHECK (code = resource || ':' || action),
     CONSTRAINT chk_permissions_resource     CHECK (resource ~ '^[a-z][a-z0-9_]*$'),
     CONSTRAINT chk_permissions_action       CHECK (action   ~ '^[a-z][a-z0-9_]*$')
 );

@@ -1,12 +1,10 @@
 -- V06__outbox.sql
--- Transactional outbox + дедупликация у потребителей.
-
 SET search_path = pg_catalog, public;
 
 CREATE TABLE outbox.outbox_events (
                                       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                       event_type      VARCHAR(100) NOT NULL,
-                                      entity_id       UUID,                                  -- nullable
+                                      entity_id       UUID,
                                       payload         JSONB NOT NULL,
                                       status          VARCHAR(20) NOT NULL DEFAULT 'NEW',
                                       attempts        INT NOT NULL DEFAULT 0,
