@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.incident.domain.event.IncidentCreated;
-import ru.agroeco.pulse.incidentorchestrator.api.IncidentOrchestratorProperties;
+import ru.agroeco.pulse.incidentorchestrator.config.IncidentOrchestratorProperties;
 import ru.agroeco.pulse.notification.api.NotificationRequested;
 import ru.agroeco.pulse.outbox.api.OutboxMessage;
 import ru.agroeco.pulse.outbox.api.OutboxPort;

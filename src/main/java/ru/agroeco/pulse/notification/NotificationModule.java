@@ -3,8 +3,8 @@ package ru.agroeco.pulse.notification;
 import org.springframework.modulith.ApplicationModule;
 
 @ApplicationModule(
-    displayName = "Notification",
-    allowedDependencies = {"platform", "auth", "refs", "audit", "outbox"}
+        displayName = "Notification",
+        // Меняем "outbox" на "outbox :: outbox" для точного соответствия named interface
+        allowedDependencies = {"platform", "auth", "refs", "audit", "outbox :: outbox"}
 )
-public interface NotificationModule {
-}
+public interface NotificationModule {}

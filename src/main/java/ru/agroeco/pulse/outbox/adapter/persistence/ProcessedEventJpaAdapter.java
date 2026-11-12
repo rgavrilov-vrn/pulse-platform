@@ -1,11 +1,10 @@
-package ru.agroeco.pulse.outbox.infrastructure;
+package ru.agroeco.pulse.outbox.adapter.persistence;
 
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.outbox.api.ProcessedEventPort;
-import ru.agroeco.pulse.outbox.adapter.persistence.ProcessedEventRepository;
 
 @Component
 public class ProcessedEventJpaAdapter implements ProcessedEventPort {

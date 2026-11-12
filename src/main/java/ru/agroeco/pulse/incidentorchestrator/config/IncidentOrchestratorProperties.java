@@ -1,4 +1,4 @@
-package ru.agroeco.pulse.incidentorchestrator.api;
+package ru.agroeco.pulse.incidentorchestrator.config;
 
 import java.time.Duration;
 import java.util.UUID;
