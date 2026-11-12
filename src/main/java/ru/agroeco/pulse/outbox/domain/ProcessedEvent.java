@@ -8,7 +8,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
-import ru.agroeco.pulse.outbox.infrastructure.persistence.ProcessedEventId;
+import ru.agroeco.pulse.outbox.adapter.persistence.ProcessedEventId;
 
 @Getter
 @Entity

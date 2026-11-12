@@ -6,11 +6,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
-import ru.agroeco.pulse.videoserver.api.CreateVideoServerRequest;
-import ru.agroeco.pulse.videoserver.api.VideoServerResponse;
+import ru.agroeco.pulse.videoserver.adapter.http.dto.CreateVideoServerRequest;
+import ru.agroeco.pulse.videoserver.adapter.http.dto.VideoServerResponse;
 import ru.agroeco.pulse.videoserver.domain.VideoServer;
 import ru.agroeco.pulse.videoserver.domain.VideoServerStatus;
-import ru.agroeco.pulse.videoserver.infrastructure.persistence.VideoServerRepository;
+import ru.agroeco.pulse.videoserver.adapter.persistence.VideoServerRepository;
 
 import java.util.Locale;
 import java.util.UUID;

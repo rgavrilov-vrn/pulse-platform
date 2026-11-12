@@ -4,13 +4,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.videoserver.api.RawVideoEventRequest;
+import ru.agroeco.pulse.videoserver.adapter.http.dto.RawVideoEventRequest;
 import ru.agroeco.pulse.videoserver.api.VideoEventNormalized;
 import ru.agroeco.pulse.videoserver.domain.NormalizedVideoEvent;
 import ru.agroeco.pulse.videoserver.domain.RawVideoEvent;
 import ru.agroeco.pulse.videoserver.domain.VideoEventIngested;
-import ru.agroeco.pulse.videoserver.infrastructure.persistence.NormalizedVideoEventRepository;
-import ru.agroeco.pulse.videoserver.infrastructure.persistence.RawVideoEventRepository;
+import ru.agroeco.pulse.videoserver.adapter.persistence.NormalizedVideoEventRepository;
+import ru.agroeco.pulse.videoserver.adapter.persistence.RawVideoEventRepository;
 
 import java.time.Instant;
 import java.util.UUID;

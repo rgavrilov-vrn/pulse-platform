@@ -7,11 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
-import ru.agroeco.pulse.refs.api.CreateDepartmentRequest;
-import ru.agroeco.pulse.refs.api.DepartmentResponse;
+import ru.agroeco.pulse.refs.adapter.dto.CreateDepartmentRequest;
+import ru.agroeco.pulse.refs.adapter.dto.DepartmentResponse;
 import ru.agroeco.pulse.refs.domain.Department;
 import ru.agroeco.pulse.refs.domain.event.DepartmentCreated;
-import ru.agroeco.pulse.refs.infrastructure.persistence.DepartmentRepository;
+import ru.agroeco.pulse.refs.adapter.persistence.DepartmentRepository;
 
 import java.time.Instant;
 import java.util.UUID;

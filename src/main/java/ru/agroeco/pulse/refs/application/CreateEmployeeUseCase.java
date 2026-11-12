@@ -8,12 +8,12 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.platform.domain.exception.BusinessRuleException;
 import ru.agroeco.pulse.platform.domain.exception.NotFoundException;
-import ru.agroeco.pulse.refs.api.CreateEmployeeRequest;
-import ru.agroeco.pulse.refs.api.EmployeeResponse;
+import ru.agroeco.pulse.refs.adapter.dto.CreateEmployeeRequest;
+import ru.agroeco.pulse.refs.adapter.dto.EmployeeResponse;
 import ru.agroeco.pulse.refs.domain.Employee;
 import ru.agroeco.pulse.refs.domain.event.EmployeeCreated;
-import ru.agroeco.pulse.refs.infrastructure.persistence.DepartmentRepository;
-import ru.agroeco.pulse.refs.infrastructure.persistence.EmployeeRepository;
+import ru.agroeco.pulse.refs.adapter.persistence.DepartmentRepository;
+import ru.agroeco.pulse.refs.adapter.persistence.EmployeeRepository;
 
 import java.time.Instant;
 import java.util.UUID;

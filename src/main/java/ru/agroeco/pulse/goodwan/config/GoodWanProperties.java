@@ -1,9 +1,9 @@
 package ru.agroeco.pulse.goodwan.config;
 
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
 import java.time.Duration;
 import java.util.List;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "goodwan")
 public record GoodWanProperties(
