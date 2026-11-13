@@ -1,7 +1,5 @@
 package ru.agroeco.pulse.trassir.application;
 
-// FIX: в Jackson 3 пакет tools.jackson.databind для ObjectMapper/JsonNode,
-// но аннотации остаются в com.fasterxml.jackson.annotation.
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.databind.JsonNode;
@@ -20,12 +18,11 @@ public record ParsedTrassirEnvelope(
         @JsonProperty("server") Server server,
         @JsonProperty("events") List<Event> events
 ) {
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Producer(String name, String version) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Server(@JsonProperty("server_id") String serverId) {}
+    public record Server(@JsonProperty("server_id") UUID serverId) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Event(

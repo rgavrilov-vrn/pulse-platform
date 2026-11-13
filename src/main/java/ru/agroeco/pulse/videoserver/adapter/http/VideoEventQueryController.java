@@ -14,6 +14,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -43,6 +44,7 @@ public class VideoEventQueryController {
     private final NormalizedVideoEventRepository repository;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('video_event:read')")
     @Operation(
             summary = "List video events",
             parameters = {
@@ -124,9 +126,16 @@ public class VideoEventQueryController {
 
     private VideoEventNormalized toDto(NormalizedVideoEvent n) {
         return new VideoEventNormalized(
-                n.getId(), n.getRawEventId(), n.getVideoServerId(),
-                n.getCameraId(), n.getChannelId(), n.getObjectId(),
-                n.getOccurredAt(), n.getSource(),
-                n.getEventType(), n.getSeverity(), n.getPayloadVersion());
+                n.getId(),
+                n.getSourceEventId(),
+                n.getVideoServerId(),
+                n.getCameraId(),
+                n.getChannelId(),
+                n.getObjectId(),
+                n.getOccurredAt(),
+                n.getSource(),
+                n.getEventType(),
+                n.getSeverity(),
+                n.getPayloadVersion());
     }
 }

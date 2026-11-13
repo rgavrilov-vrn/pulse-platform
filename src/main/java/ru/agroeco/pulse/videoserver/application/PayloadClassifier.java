@@ -15,6 +15,28 @@ public class PayloadClassifier {
 
     private final ObjectMapper mapper;
 
+    public static VideoEventType mapSubtype(String subtype) {
+        if (subtype == null || subtype.isBlank()) return VideoEventType.UNKNOWN;
+        return switch (subtype.toLowerCase().trim()) {
+            case "motion", "motion_detected"      -> VideoEventType.MOTION_DETECTED;
+            case "offline", "camera_offline"      -> VideoEventType.CAMERA_OFFLINE;
+            case "tamper", "tampering", "camera_tampering" -> VideoEventType.CAMERA_TAMPERING;
+            case "video_event", "video_event_received"     -> VideoEventType.VIDEO_EVENT_RECEIVED;
+            default -> VideoEventType.VIDEO_EVENT_RECEIVED;
+        };
+    }
+
+    public static EventSeverity mapSeverity(String value) {
+        if (value == null || value.isBlank()) return EventSeverity.INFO;
+        return switch (value.toLowerCase().trim()) {
+            case "critical", "tamper" -> EventSeverity.CRITICAL;
+            case "warning", "motion"  -> EventSeverity.WARNING;
+            default                   -> EventSeverity.INFO;
+        };
+    }
+
+    /** @deprecated в trassir-пути subtype/severity уже классифицированы. */
+    @Deprecated
     public Classification classify(String rawPayload) {
         try {
             JsonNode node = mapper.readTree(rawPayload);
@@ -34,15 +56,6 @@ public class PayloadClassifier {
             case "offline", "camera_offline" -> VideoEventType.CAMERA_OFFLINE;
             case "tamper", "tampering", "camera_tampering" -> VideoEventType.CAMERA_TAMPERING;
             default -> VideoEventType.VIDEO_EVENT_RECEIVED;
-        };
-    }
-
-    private EventSeverity mapSeverity(String value) {
-        if (value == null || value.isBlank()) return EventSeverity.INFO;
-        return switch (value.toLowerCase().trim()) {
-            case "critical", "tamper" -> EventSeverity.CRITICAL;
-            case "warning", "motion" -> EventSeverity.WARNING;
-            default -> EventSeverity.INFO;
         };
     }
 

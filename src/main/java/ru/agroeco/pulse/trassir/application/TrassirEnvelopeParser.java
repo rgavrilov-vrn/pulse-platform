@@ -66,14 +66,9 @@ public class TrassirEnvelopeParser {
         if (envelope.batchId() == null) {
             throw badRequest("MISSING_TRASSIR_BATCH_ID");
         }
-        if (envelope.server() == null
-                || envelope.server().serverId() == null
-                || envelope.server().serverId().isBlank()) {
+        if (envelope.server() == null || envelope.server().serverId() == null) {
             throw badRequest("MISSING_TRASSIR_SERVER_ID");
         }
-        // FIX #79: producer обязателен по контракту trassir.telemetry/1.0;
-        // producer.name — обязателен. Ранее validate() это пропускал,
-        // и падало на NOT NULL constraint ingest_raw.producer_name (409).
         if (envelope.producer() == null
                 || envelope.producer().name() == null
                 || envelope.producer().name().isBlank()) {

@@ -4,9 +4,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record TrassirEventContext(
-        String serverId,
+        UUID serverId,
         UUID batchId,
         Instant receivedAt,
         ParsedTrassirEnvelope.Event event
-) {
-}
+) {}

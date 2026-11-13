@@ -5,17 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.agroeco.pulse.trassir.domain.TrassirObject;
-import ru.agroeco.pulse.trassir.domain.TrassirServerState;
-import ru.agroeco.pulse.trassir.domain.TrassirSnapshot;
-import ru.agroeco.pulse.trassir.domain.TrassirSnapshotPart;
-import ru.agroeco.pulse.trassir.domain.TrassirSnapshotStream;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirObjectRepository;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirServerStateRepository;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotObjectRepository;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotPartRepository;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotRepository;
-import ru.agroeco.pulse.trassir.adapter.persistence.TrassirSnapshotStreamRepository;
+import ru.agroeco.pulse.platform.api.support.CorrelationIds;
+import ru.agroeco.pulse.platform.application.event.EventDispatcher;
+import ru.agroeco.pulse.trassir.adapter.persistence.*;
+import ru.agroeco.pulse.trassir.api.event.TrassirObjectsSnapshotReceived;
+import ru.agroeco.pulse.trassir.domain.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -33,7 +27,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     private final TrassirSnapshotStreamRepository streamRepository;
     private final TrassirSnapshotObjectRepository snapshotObjectRepository;
     private final TrassirObjectRepository objectRepository;
-    private final TrassirServerStateRepository serverStateRepository;   // FIX #140
+    private final TrassirServerStateRepository serverStateRepository;
+    private final EventDispatcher events;
     private final ObjectMapper objectMapper;
 
     @Value("${pulse.trassir.snapshot-retry.base-delay-seconds:60}")
@@ -43,7 +38,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     @Transactional
     public EventProcessingResult handle(TrassirEventContext context) {
         JsonNode data = context.event().data();
-
         String snapshotIdText = text(data, "snapshot_id");
         Integer totalParts = intValue(data, "parts_total");
         Integer partIndex = intValue(data, "part_index");
@@ -60,7 +54,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.failure("Snapshot data.snapshot_id must be a valid UUID");
         }
 
-        // Атомарное создание + stream_id = server_id (FIX #27, #30)
         snapshotRepository.insertIfAbsent(
                 UUID.randomUUID(), externalSnapshotId, context.serverId(),
                 totalParts, context.event().observedAt());
@@ -70,22 +63,17 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                 .orElseThrow(() -> new IllegalStateException(
                         "Snapshot vanished after insertIfAbsent: " + externalSnapshotId));
 
-        if (snapshot.getCompletedAt() != null) {
-            return EventProcessingResult.success();
-        }
+        if (snapshot.getCompletedAt() != null) return EventProcessingResult.success();
 
-        // Атомарная вставка part'а (FIX #28)
         partRepository.insertIfAbsent(
                 UUID.randomUUID(), snapshot.getId(), partIndex,
                 toJson(context.event().data()), context.event().observedAt());
 
         if (partRepository.countBySnapshotId(snapshot.getId()) < totalParts) {
-            return EventProcessingResult.success();   // ждём остальные parts
+            return EventProcessingResult.success();
         }
 
         EventProcessingResult result = assembleInternal(snapshot);
-
-        // FIX #16: markFailed фиксируется в той же транзакции
         if (!result.successful()) {
             snapshotRepository.markFailed(
                     snapshot.getId(), result.error(),
@@ -94,10 +82,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
         return result;
     }
 
-    /**
-     * FIX #29 + #137: публичный метод для retry-worker'а.
-     * Advisory lock сериализует конкурентные вызовы (sweep + onEventsAccepted).
-     */
     @Transactional
     public EventProcessingResult assemble(UUID snapshotId) {
         Boolean locked = snapshotRepository.tryAdvisoryLock(snapshotId.toString());
@@ -106,12 +90,8 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             return EventProcessingResult.success();
         }
         TrassirSnapshot snapshot = snapshotRepository.findByIdForUpdate(snapshotId).orElse(null);
-        if (snapshot == null) {
-            return EventProcessingResult.failure("Snapshot not found: " + snapshotId);
-        }
-        if (snapshot.getCompletedAt() != null) {
-            return EventProcessingResult.success();
-        }
+        if (snapshot == null) return EventProcessingResult.failure("Snapshot not found: " + snapshotId);
+        if (snapshot.getCompletedAt() != null) return EventProcessingResult.success();
         return assembleInternal(snapshot);
     }
 
@@ -163,7 +143,6 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
                 return EventProcessingResult.success();
             }
 
-            // FIX #140: last_snapshot_at в server_state
             TrassirServerState state = serverStateRepository.findById(snapshot.getServerId())
                     .orElseGet(() -> {
                         TrassirServerState created = new TrassirServerState();
@@ -174,13 +153,13 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             state.setUpdatedAt(completedAt);
             serverStateRepository.save(state);
 
-            // FIX #30: stream_id = server_id (одна запись на сервер)
+            String streamKey = snapshot.getServerId().toString();
             TrassirSnapshotStream stream = streamRepository
-                    .findByServerIdAndStreamId(snapshot.getServerId(), snapshot.getServerId())
+                    .findByServerIdAndStreamId(snapshot.getServerId(), streamKey)
                     .orElseGet(() -> {
                         TrassirSnapshotStream created = new TrassirSnapshotStream();
                         created.setServerId(snapshot.getServerId());
-                        created.setStreamId(snapshot.getServerId());
+                        created.setStreamId(streamKey);
                         return created;
                     });
             stream.setLastSnapshotId(snapshot.getId());
@@ -188,8 +167,24 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
             stream.setUpdatedAt(completedAt);
             streamRepository.save(stream);
 
-            return EventProcessingResult.success();
+            // Публикация события для videoserver (reconcile inventory)
+            List<TrassirObjectsSnapshotReceived.SnapshotObject> snapshotObjects =
+                    snapshotObjectRepository.findBySnapshotId(snapshot.getId()).stream()
+                            .map(o -> new TrassirObjectsSnapshotReceived.SnapshotObject(
+                                    o.getObjectKey(), o.getObjectPayload()))
+                            .toList();
 
+            events.dispatch(new TrassirObjectsSnapshotReceived(
+                    snapshot.getId(),
+                    1,
+                    snapshot.getServerId(),
+                    snapshot.getId(),
+                    completedAt,
+                    snapshotObjects,
+                    CorrelationIds.current()
+            ));
+
+            return EventProcessingResult.success();
         } catch (Exception e) {
             log.warn("Snapshot assembly failed: snapshotId={}", snapshot.getId(), e);
             return EventProcessingResult.failure(
@@ -207,13 +202,12 @@ public class ProcessTrassirObjectsSnapshotUseCase implements TrassirEventUseCase
     }
 
     private String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        return value != null && value.isString() && !value.asString().isBlank()
-                ? value.asString() : null;
+        JsonNode v = node.get(field);
+        return v != null && v.isString() && !v.asString().isBlank() ? v.asString() : null;
     }
 
     private Integer intValue(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        return value != null && value.isInt() ? value.asInt() : null;
+        JsonNode v = node.get(field);
+        return v != null && v.isInt() ? v.asInt() : null;
     }
 }

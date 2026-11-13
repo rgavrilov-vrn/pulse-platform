@@ -33,7 +33,7 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
         """, nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id,
                        @Param("rawId") UUID rawId,
-                       @Param("serverId") String serverId,
+                       @Param("serverId") UUID serverId,
                        @Param("eventIndex") Integer eventIndex,
                        @Param("eventId") UUID eventId,
                        @Param("eventType") String eventType,

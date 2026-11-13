@@ -53,7 +53,12 @@ public enum DomainEventType {
     DEPARTMENT_CREATED("DEPARTMENT_CREATED"),
 
     // ---- refs: employees ----
-    EMPLOYEE_CREATED("EMPLOYEE_CREATED")
+    EMPLOYEE_CREATED("EMPLOYEE_CREATED"),
+
+    // ---- trassir integration (внутренний IPC, в Kafka не идут) ----
+    TRASSIR_OBJECTS_SNAPSHOT_RECEIVED("TRASSIR_OBJECTS_SNAPSHOT_RECEIVED"),
+    TRASSIR_VIDEO_EVENT_RECEIVED("TRASSIR_VIDEO_EVENT_RECEIVED")
+
     ;
 
     private final String value;

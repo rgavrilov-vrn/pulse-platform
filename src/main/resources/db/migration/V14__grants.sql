@@ -96,21 +96,16 @@ BEGIN
 END LOOP;
 END $$;
 
--- ============================================================================
--- pg_trgm GIN для audit search (FIX #71 — исправлено)
--- ============================================================================
 -- ВАЖНО: AuditQueryService делает OR из LIKE по отдельным колонкам:
 --   lower(action) LIKE :p OR lower(request_id) LIKE :p OR ...
--- Индекс на конкатенации (lower(a)||' '||...) при таком запросе НЕ используется.
--- Решение: 5 per-column GIN-индексов. PostgreSQL умеет bitmap OR по ним.
--- Альтернатива: переписать query на lower(concat_ws(' ', a, b, ...)) LIKE :p
--- и оставить один GIN на конкатенации. Требует изменения кода.
+-- Индекс на конкатенации не используется. Per-column GIN (bitmap OR).
+-- coalesce() НЕ нужен: для NULL-строк lower(col) LIKE ? = NULL = не матчится.
 CREATE INDEX IF NOT EXISTS ix_audit_log_action_trgm
     ON audit.audit_log USING GIN (lower(action) gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS ix_audit_log_request_id_trgm
-    ON audit.audit_log USING GIN (lower(coalesce(request_id,'')) gin_trgm_ops);
+    ON audit.audit_log USING GIN (lower(request_id) gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS ix_audit_log_user_agent_trgm
-    ON audit.audit_log USING GIN (lower(coalesce(user_agent,'')) gin_trgm_ops);
+    ON audit.audit_log USING GIN (lower(user_agent) gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS ix_audit_log_entity_schema_trgm
     ON audit.audit_log USING GIN (lower(entity_schema) gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS ix_audit_log_entity_table_trgm

@@ -22,7 +22,7 @@ public class TrassirAgentHeartbeat {
     private UUID id;
 
     @Column(name = "server_id", nullable = false)
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "observed_at", nullable = false)
     private Instant observedAt;

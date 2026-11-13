@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface TrassirObjectRepository extends JpaRepository<TrassirObject, UUID> {
-    Optional<TrassirObject> findByServerIdAndObjectKey(String serverId, String objectKey);
+    Optional<TrassirObject> findByServerIdAndObjectKey(UUID serverId, String objectKey);
 
     @Modifying
     @Query("delete from TrassirObject object")

@@ -54,6 +54,12 @@ class ModularityTests {
         modules.verify();
     }
 
+    @Test
+    void writeDocumentation() {
+        // Опционально: генерирует документацию по модулям
+        new Documenter(modules).writeDocumentation();
+    }
+
     // =================================================================
     // 2. ArchUnit: shared-модули не должны зависеть от чужих модулей.
     //

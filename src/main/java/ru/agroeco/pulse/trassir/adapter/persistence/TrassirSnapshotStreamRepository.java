@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface TrassirSnapshotStreamRepository extends JpaRepository<TrassirSnapshotStream, UUID> {
-    Optional<TrassirSnapshotStream> findByServerIdAndStreamId(String serverId, String streamId);
+    Optional<TrassirSnapshotStream> findByServerIdAndStreamId(UUID serverId, String streamId);
 
     @Modifying
     @Query("delete from TrassirSnapshotStream stream")

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ru.agroeco.pulse.trassir.domain.TrassirSnapshotObject;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface TrassirSnapshotObjectRepository extends JpaRepository<TrassirSnapshotObject, UUID> {
@@ -24,4 +25,6 @@ public interface TrassirSnapshotObjectRepository extends JpaRepository<TrassirSn
     @Modifying
     @Query("delete from TrassirSnapshotObject object")
     int deleteAllObjects();
+
+    List<TrassirSnapshotObject> findBySnapshotId(UUID snapshotId);
 }

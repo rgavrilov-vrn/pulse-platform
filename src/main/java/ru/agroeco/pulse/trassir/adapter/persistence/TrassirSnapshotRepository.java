@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot, UUID> {
 
     Optional<TrassirSnapshot> findByServerIdAndExternalSnapshotId(
-            String serverId, UUID externalSnapshotId);
+            UUID serverId, UUID externalSnapshotId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM TrassirSnapshot s WHERE s.id = :id")
@@ -37,7 +37,7 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
         """, nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id,
                        @Param("externalSnapshotId") UUID externalSnapshotId,
-                       @Param("serverId") String serverId,
+                       @Param("serverId") UUID serverId,
                        @Param("totalParts") Integer totalParts,
                        @Param("receivedAt") Instant receivedAt);
 

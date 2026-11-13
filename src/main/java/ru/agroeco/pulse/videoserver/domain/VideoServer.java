@@ -1,14 +1,6 @@
 package ru.agroeco.pulse.videoserver.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,19 +21,15 @@ import java.util.UUID;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class VideoServer {
 
-    @Id
-    private UUID id;
+    @Id private UUID id;
 
-    @Column(name = "object_id")
-    private UUID objectId;
-
-    @Column(name = "zone_id")
-    private UUID zoneId;
+    @Column(name = "object_id") private UUID objectId;
+    @Column(name = "zone_id")   private UUID zoneId;
 
     @Column(nullable = false, length = 64)
     private String source;
 
-    @Column(name = "external_id", nullable = false, length = 255)
+    @Column(name = "external_id", length = 255)
     private String externalId;
 
     @Column(nullable = false, length = 255)
@@ -58,6 +46,10 @@ public class VideoServer {
     @Column(length = 32)
     private VideoServerStatus status;
 
+    @Column(name = "last_seen_at")   private Instant lastSeenAt;
+    @Column(name = "deleted_at")     private Instant deletedAt;
+    @Column(name = "deactivated_by", length = 32) private String deactivatedBy;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
@@ -67,8 +59,8 @@ public class VideoServer {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public VideoServer(UUID id, UUID objectId, UUID zoneId, String source, String externalId, String name,
-                       String host, String baseUrl, String description,
+    public VideoServer(UUID id, UUID objectId, UUID zoneId, String source, String externalId,
+                       String name, String host, String baseUrl, String description,
                        VideoServerStatus status, boolean isActive) {
         this.id = id;
         this.objectId = objectId;
@@ -83,6 +75,22 @@ public class VideoServer {
         this.isActive = isActive;
     }
 
+    // --- domain mutators для reconcile/heartbeat ---
+
+    public void markSeen(Instant at) {
+        this.lastSeenAt = at;
+        this.status = VideoServerStatus.ONLINE;
+        this.deletedAt = null;
+        this.deactivatedBy = null;
+        this.isActive = true;
+    }
+
+    public void softDelete(Instant at, String by) {
+        this.deletedAt = at;
+        this.deactivatedBy = by;
+        this.isActive = false;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
@@ -91,7 +99,5 @@ public class VideoServer {
     }
 
     @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
-    }
+    void onUpdate() { updatedAt = Instant.now(); }
 }

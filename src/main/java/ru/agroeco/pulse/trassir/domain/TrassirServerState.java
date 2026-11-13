@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "server_state", schema = "trassir")
@@ -16,7 +17,7 @@ public class TrassirServerState {
 
     @Id
     @Column(name = "server_id")
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "last_heartbeat_at")
     private Instant lastHeartbeatAt;

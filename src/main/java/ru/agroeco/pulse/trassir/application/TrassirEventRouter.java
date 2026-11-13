@@ -12,30 +12,20 @@ public class TrassirEventRouter {
     private final TrassirMetrics metrics;
     private final Map<String, TrassirEventUseCase> handlers;
 
-    /**
-     * FIX: убран @RequiredArgsConstructor — он генерировал второй конструктор
-     * на (TrassirMetrics, Map), Spring не мог выбрать между ним и этим.
-     * Плюс @RequiredArgsConstructor попытался бы заинжектить
-     * Map<String, TrassirEventUseCase> из всех бинов TrassirEventUseCase,
-     * но с ключами по имени бина (applyAgentHeartbeatUseCase и т.д.),
-     * а не по event_type (agent.heartbeat).
-     */
     public TrassirEventRouter(TrassirMetrics metrics,
                               ApplyAgentHeartbeatUseCase heartbeat,
                               ProcessTrassirObjectsSnapshotUseCase snapshot,
-                              ApplyTrassirSystemEventUseCase systemEvent) {
+                              ApplyTrassirSystemEventUseCase systemEvent,
+                              ApplyTrassirVideoEventUseCase videoEvent) {
         this.metrics = metrics;
         this.handlers = Map.of(
                 "agent.heartbeat",        heartbeat,
                 "agent.objects_snapshot", snapshot,
-                "trassir.system_event",   systemEvent);
+                "trassir.system_event",   systemEvent,
+                "trassir.video_event",    videoEvent
+        );
     }
 
-    /**
-     * FIX #81: неизвестный тип не пропускаем молча (раньше success()),
-     * а возвращаем failure — событие уйдёт в FAILED/retry,
-     * по метрике trassir_events_unknown_total будут алерты.
-     */
     public EventProcessingResult route(TrassirEventContext context) {
         TrassirEventUseCase handler = handlers.get(context.event().eventType());
         if (handler == null) {

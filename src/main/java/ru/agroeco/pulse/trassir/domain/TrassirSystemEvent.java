@@ -22,7 +22,7 @@ public class TrassirSystemEvent {
     private UUID id;
 
     @Column(name = "server_id", nullable = false)
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "event_id", nullable = false, unique = true)
     private UUID eventId;

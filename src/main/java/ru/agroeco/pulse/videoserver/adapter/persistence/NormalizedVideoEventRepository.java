@@ -14,14 +14,11 @@ public interface NormalizedVideoEventRepository
         extends JpaRepository<NormalizedVideoEvent, UUID>,
         JpaSpecificationExecutor<NormalizedVideoEvent> {
 
-    Optional<NormalizedVideoEvent> findByRawEventId(UUID rawEventId);
+    Optional<NormalizedVideoEvent> findByVideoServerIdAndExternalEventId(
+            UUID videoServerId, String externalEventId);
 
-    // сортировка управляется через Pageable, не через имя метода
     Page<NormalizedVideoEvent> findByVideoServerId(UUID videoServerId, Pageable pageable);
-
     Page<NormalizedVideoEvent> findByCameraId(UUID cameraId, Pageable pageable);
-
     Page<NormalizedVideoEvent> findByVideoServerIdAndOccurredAtBetween(
             UUID videoServerId, Instant from, Instant to, Pageable pageable);
-
 }

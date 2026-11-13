@@ -13,10 +13,6 @@ public interface TrassirIngestRawRepository extends JpaRepository<TrassirIngestR
 
     boolean existsByBatchId(UUID batchId);
 
-    /**
-     * FIX #27: атомарная вставка с идемпотентностью по batch_id.
-     * Возвращает 1 при успехе, 0 если батч уже есть (race-safe).
-     */
     @Modifying
     @Query(value = """
         INSERT INTO trassir.ingest_raw
@@ -33,7 +29,7 @@ public interface TrassirIngestRawRepository extends JpaRepository<TrassirIngestR
                        @Param("sentAt") Instant sentAt,
                        @Param("producerName") String producerName,
                        @Param("producerVersion") String producerVersion,
-                       @Param("serverId") String serverId,
+                       @Param("serverId") UUID serverId,
                        @Param("rawBody") String rawBody);
 
     @Modifying

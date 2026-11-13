@@ -6,9 +6,8 @@ import java.util.UUID;
 
 public record TrassirEventsAcceptedEvent(
         UUID rawId,
-        String serverId,
+        UUID serverId,
         UUID batchId,
         Instant receivedAt,
         List<UUID> eventIds
-) {
-}
+) {}

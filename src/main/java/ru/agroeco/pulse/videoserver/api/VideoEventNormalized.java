@@ -5,15 +5,14 @@ import java.util.UUID;
 
 public record VideoEventNormalized(
         UUID eventId,
-        UUID rawEventId,
+        UUID sourceEventId,        // = trassir.events.event_id (traceability)
         UUID videoServerId,
         UUID cameraId,
         UUID channelId,
-        UUID objectId,
+        UUID objectId,             // reserved: facility link (future)
         Instant occurredAt,
         String source,
         VideoEventType eventType,
         EventSeverity severity,
         int payloadVersion
-) {
-}
+) {}

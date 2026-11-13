@@ -20,7 +20,7 @@ public class TrassirSnapshotStream {
     private UUID id;
 
     @Column(name = "server_id", nullable = false)
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "stream_id", nullable = false)
     private String streamId;

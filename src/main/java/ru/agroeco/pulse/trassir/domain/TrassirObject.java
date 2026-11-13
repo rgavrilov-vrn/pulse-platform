@@ -12,17 +12,13 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "objects", schema = "trassir")
-@Getter
-@Setter
-@NoArgsConstructor
+@Getter @Setter @NoArgsConstructor
 public class TrassirObject {
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     @Column(name = "server_id", nullable = false)
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "object_key", nullable = false)
     private String objectKey;

@@ -25,7 +25,7 @@ public class TrassirEvent {
     private UUID rawId;
 
     @Column(name = "server_id", nullable = false, updatable = false)
-    private String serverId;
+    private UUID serverId;
 
     @Column(name = "event_index", nullable = false, updatable = false)
     private Integer eventIndex;

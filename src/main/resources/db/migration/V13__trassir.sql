@@ -1,7 +1,10 @@
 -- V13__trassir.sql
+-- server_id = videoserver.video_servers.id (UUID). FK не объявлен: trassir — независимый модуль.
 SET search_path = pg_catalog, public;
 
--- ---------- Ingest ----------
+-- ============================================================
+-- Ingest
+-- ============================================================
 CREATE TABLE trassir.ingest_raw (
                                     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                     batch_id         UUID NOT NULL UNIQUE,
@@ -9,7 +12,7 @@ CREATE TABLE trassir.ingest_raw (
                                     sent_at          TIMESTAMPTZ,
                                     producer_name    TEXT,
                                     producer_version TEXT,
-                                    server_id        TEXT NOT NULL,
+                                    server_id        UUID NOT NULL,
                                     raw_body         JSONB NOT NULL,
                                     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -17,11 +20,16 @@ CREATE TABLE trassir.ingest_raw (
 CREATE INDEX ix_trassir_ingest_raw_created_at ON trassir.ingest_raw (created_at);
 CREATE INDEX ix_trassir_ingest_raw_server_id  ON trassir.ingest_raw (server_id);
 
--- ---------- Events ----------
+COMMENT ON COLUMN trassir.ingest_raw.server_id IS
+    '= videoserver.video_servers.id (UUID). Агент получает UUID из конфигурации.';
+
+-- ============================================================
+-- Events
+-- ============================================================
 CREATE TABLE trassir.events (
                                 id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                 raw_id           UUID NOT NULL REFERENCES trassir.ingest_raw(id),
-                                server_id        TEXT NOT NULL,
+                                server_id        UUID NOT NULL,
                                 event_index      INTEGER NOT NULL,
                                 event_id         UUID NOT NULL UNIQUE,
                                 event_type       TEXT NOT NULL,
@@ -46,10 +54,12 @@ CREATE INDEX ix_trassir_events_server_id         ON trassir.events (server_id);
 CREATE INDEX ix_trassir_events_status_next_retry ON trassir.events (status, next_retry_at);
 CREATE INDEX ix_trassir_events_created_at        ON trassir.events (created_at);
 
--- ---------- Snapshots ----------
+-- ============================================================
+-- Snapshots
+-- ============================================================
 CREATE TABLE trassir.snapshot_streams (
                                           id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                                          server_id        TEXT NOT NULL,
+                                          server_id        UUID NOT NULL,
                                           stream_id        TEXT NOT NULL,
                                           last_snapshot_id UUID,
                                           last_part_index  INTEGER,
@@ -57,15 +67,13 @@ CREATE TABLE trassir.snapshot_streams (
                                           UNIQUE (server_id, stream_id)
 );
 
--- FIX #30 (бывший V16): stream_id = стабильный идентификатор потока (обычно server_id),
--- НЕ snapshot UUID. Иначе таблица растёт 1:1 со снапшотами.
 COMMENT ON COLUMN trassir.snapshot_streams.stream_id IS
-    'Стабильный идентификатор потока (обычно server_id). Не snapshot UUID.';
+    'Стабильный идентификатор потока (обычно = server_id.toString()). Не snapshot UUID.';
 
 CREATE TABLE trassir.snapshots (
                                    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                    external_snapshot_id UUID NOT NULL UNIQUE,
-                                   server_id            TEXT NOT NULL,
+                                   server_id            UUID NOT NULL,
                                    stream_id            TEXT NOT NULL,
                                    snapshot_seq         BIGINT NOT NULL,
                                    total_parts          INTEGER NOT NULL,
@@ -103,7 +111,7 @@ CREATE TABLE trassir.snapshot_objects (
 
 CREATE TABLE trassir.objects (
                                  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                                 server_id      TEXT NOT NULL,
+                                 server_id      UUID NOT NULL,
                                  object_key     TEXT NOT NULL,
                                  object_payload JSONB NOT NULL,
                                  first_seen_at  TIMESTAMPTZ NOT NULL,
@@ -114,10 +122,16 @@ CREATE TABLE trassir.objects (
 
 CREATE INDEX ix_trassir_objects_server_key ON trassir.objects (server_id, object_key);
 
--- ---------- System events / state ----------
+COMMENT ON TABLE trassir.objects IS
+    'Сырой append-only лог объектов из agent.objects_snapshot. '
+    'Текущее состояние inventory — videoserver.cameras (reconcile).';
+
+-- ============================================================
+-- System events / state
+-- ============================================================
 CREATE TABLE trassir.system_events (
                                        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                                       server_id     TEXT NOT NULL,
+                                       server_id     UUID NOT NULL,
                                        event_id      UUID NOT NULL UNIQUE,
                                        event_type    TEXT NOT NULL,
                                        event_version TEXT NOT NULL,
@@ -133,7 +147,7 @@ CREATE TABLE trassir.system_events (
 CREATE INDEX ix_trassir_system_events_created_at ON trassir.system_events (created_at);
 
 CREATE TABLE trassir.server_state (
-                                      server_id         TEXT PRIMARY KEY,
+                                      server_id         UUID PRIMARY KEY,
                                       last_heartbeat_at TIMESTAMPTZ,
                                       last_snapshot_at  TIMESTAMPTZ,
                                       updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -141,7 +155,7 @@ CREATE TABLE trassir.server_state (
 
 CREATE TABLE trassir.agent_heartbeats (
                                           id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                                          server_id   TEXT NOT NULL,
+                                          server_id   UUID NOT NULL,
                                           observed_at TIMESTAMPTZ NOT NULL,
                                           component   TEXT NOT NULL,
                                           status      TEXT,
@@ -149,9 +163,12 @@ CREATE TABLE trassir.agent_heartbeats (
                                           created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_trassir_agent_heartbeats_server ON trassir.agent_heartbeats (server_id, observed_at DESC);
+CREATE INDEX ix_trassir_agent_heartbeats_server
+    ON trassir.agent_heartbeats (server_id, observed_at DESC);
 
--- ---------- Admin audit ----------
+-- ============================================================
+-- Admin audit
+-- ============================================================
 CREATE TABLE trassir.admin_audit_log (
                                          id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                                          actor      TEXT NOT NULL,
