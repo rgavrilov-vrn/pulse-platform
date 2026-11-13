@@ -1,13 +1,6 @@
 package ru.agroeco.pulse.videoserver.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -40,6 +33,9 @@ public class Channel {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -54,6 +50,15 @@ public class Channel {
         this.name = name;
         this.status = status;
         this.isActive = isActive;
+    }
+
+    // --- domain mutators для будущего reconcile каналов ---
+
+    public void applySnapshot(String name, ChannelStatus status, Instant seenAt) {
+        this.name = name;
+        this.status = status;
+        this.lastSeenAt = seenAt;
+        this.isActive = true;
     }
 
     @PrePersist
