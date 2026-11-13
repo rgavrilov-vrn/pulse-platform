@@ -14,8 +14,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 
 @Slf4j
@@ -52,7 +50,6 @@ public class ReconcileVideoServersInventoryUseCase {
 
         Instant seenAt = event.receivedAt();
 
-        // 0. Парсинг + reverse-map
         Map<String, JsonNode> payloadByKey = new HashMap<>();
         Map<String, String> ipDeviceByObjectKey = new HashMap<>();
         Map<String, String> channelToDevice = new HashMap<>();
@@ -81,15 +78,14 @@ public class ReconcileVideoServersInventoryUseCase {
             }
         }
 
-        // 1. server_health
         if (serverPayload != null) {
             reconcileServerHealth(event.serverId(), serverPayload, seenAt);
         }
 
-        // 2. IP Device → Camera (с diff-событиями)
+        // IP Device → Camera
         Set<String> seenCameraKeys = new HashSet<>();
         int createdCameras = 0, updatedCameras = 0;
-        int camOffline = 0, camOnline = 0, camDegraded = 0, camRecovered = 0;
+        int camOffline = 0, camOnline = 0, camDegraded = 0;
 
         for (var obj : event.objects()) {
             JsonNode payload = payloadByKey.get(obj.objectKey());
@@ -127,7 +123,6 @@ public class ReconcileVideoServersInventoryUseCase {
                 updatedCameras++;
             }
 
-            // derived events — только для существующих камер (не для первой встречи)
             if (!isNew) {
                 if (diff.isOffline() && !"Disconnected".equalsIgnoreCase(diff.previousConnection())) {
                     events.dispatch(CameraOffline.builder()
@@ -154,7 +149,7 @@ public class ReconcileVideoServersInventoryUseCase {
         }
         cameras.flush();
 
-        // 3. Channel → Channel (с diff-событиями)
+        // Channel → Channel
         Set<String> seenChannelKeys = new HashSet<>();
         int createdChannels = 0, updatedChannels = 0, skippedChannels = 0;
         int streamLost = 0, streamRestored = 0, recordingStopped = 0;
@@ -180,7 +175,8 @@ public class ReconcileVideoServersInventoryUseCase {
             seenChannelKeys.add(obj.objectKey());
 
             String name = textOr(payload, "name", obj.objectKey());
-            ChannelStatus status = parseStatus(textOrNull(payload, "status"));
+            // ✅ явный status (если когда-нибудь появится в payload) — иначе null, Channel сам вычислит
+            ChannelStatus explicitStatus = parseStatus(textOrNull(payload, "status"));
             Boolean signal = v != null && v.has("signal") ? v.get("signal").asInt() != 0 : null;
             Boolean recordingLocal = v != null && v.has("recording_local") ? v.get("recording_local").asInt() != 0 : null;
             String grabberError = v != null ? textOrNull(v, "grabber_error") : null;
@@ -193,14 +189,14 @@ public class ReconcileVideoServersInventoryUseCase {
             boolean isNew = existingOpt.isEmpty();
 
             if (isNew) {
-                channel = new Channel(UUID.randomUUID(), cameraId, obj.objectKey(), name, status, true);
-                diff = channel.applySnapshotWithDiff(name, status, seenAt,
+                channel = new Channel(UUID.randomUUID(), cameraId, obj.objectKey(), name, explicitStatus, true);
+                diff = channel.applySnapshotWithDiff(name, explicitStatus, seenAt,
                         signal, recordingLocal, grabberError, fpsMain, kbpsMain);
                 channels.save(channel);
                 createdChannels++;
             } else {
                 channel = existingOpt.get();
-                diff = channel.applySnapshotWithDiff(name, status, seenAt,
+                diff = channel.applySnapshotWithDiff(name, explicitStatus, seenAt,
                         signal, recordingLocal, grabberError, fpsMain, kbpsMain);
                 channels.save(channel);
                 updatedChannels++;
@@ -231,7 +227,6 @@ public class ReconcileVideoServersInventoryUseCase {
             }
         }
 
-        // 4. soft-delete
         int deactivatedCameras = 0, deactivatedChannels = 0;
         if (!seenCameraKeys.isEmpty()) {
             deactivatedCameras = cameras.softDeleteMissingForServer(event.serverId(), seenCameraKeys, seenAt);

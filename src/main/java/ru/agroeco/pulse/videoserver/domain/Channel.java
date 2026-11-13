@@ -43,7 +43,7 @@ public class Channel {
         this.isActive = isActive;
     }
 
-    public ChannelSnapshotDiff applySnapshotWithDiff(String name, ChannelStatus status,
+    public ChannelSnapshotDiff applySnapshotWithDiff(String name, ChannelStatus overrideStatus,
                                                      Instant seenAt, Boolean signal,
                                                      Boolean recordingLocal, String grabberError,
                                                      Float fpsMain, Float kbpsMain) {
@@ -53,7 +53,6 @@ public class Channel {
                 this.lastGrabberError, grabberError);
 
         this.name = name;
-        this.status = status;
         this.lastSeenAt = seenAt;
         this.lastSignalAt = seenAt;
         this.lastSignal = signal;
@@ -62,6 +61,11 @@ public class Channel {
         this.lastFpsMain = fpsMain;
         this.lastKbpsMain = kbpsMain;
         this.isActive = true;
+
+        // ✅ приоритет: явный overrideStatus (если пришёл в payload) → signal → UNKNOWN
+        this.status = (overrideStatus != null)
+                ? overrideStatus
+                : mapSignalToStatus(signal, grabberError);
 
         return diff;
     }
@@ -74,11 +78,22 @@ public class Channel {
 
     public void updateManually(String name, ChannelStatus status) {
         this.name = name;
-        this.status = status;
+        if (status != null) this.status = status;
     }
 
     public void softDeleteManually(Instant at) {
         this.isActive = false;
+    }
+
+    /**
+     * signal + grabber_error → ChannelStatus.
+     * signal=1 & нет ошибки → ONLINE; signal=0 → OFFLINE; иначе UNKNOWN.
+     */
+    private static ChannelStatus mapSignalToStatus(Boolean signal, String grabberError) {
+        if (signal == null) return ChannelStatus.UNKNOWN;
+        if (!signal) return ChannelStatus.OFFLINE;
+        if (grabberError != null && !grabberError.isBlank()) return ChannelStatus.UNKNOWN;
+        return ChannelStatus.ONLINE;
     }
 
     @PrePersist
@@ -86,6 +101,7 @@ public class Channel {
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (status == null) status = ChannelStatus.UNKNOWN;
     }
 
     @PreUpdate

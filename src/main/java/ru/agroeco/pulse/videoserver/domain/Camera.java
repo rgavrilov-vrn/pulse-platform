@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -54,10 +55,6 @@ public class Camera {
         this.isActive = isActive;
     }
 
-    /**
-     * Применить данные snapshot'а; вернуть diff для derived-events.
-     * @return true если состояние connection изменилось с "healthy" на "degraded".
-     */
     public CameraSnapshotDiff applySnapshotWithDiff(String name, String code, String description,
                                                     Instant seenAt, String connectionStatus,
                                                     String ipAddress, String model, String family) {
@@ -76,6 +73,9 @@ public class Camera {
         this.deletedAt = null;
         this.deactivatedBy = null;
         this.isActive = true;
+
+        // ✅ маппинг values.connection → CameraStatus
+        this.status = mapConnectionToStatus(connectionStatus);
 
         return diff;
     }
@@ -103,17 +103,30 @@ public class Camera {
         this.isActive = false;
     }
 
+    /**
+     * values.connection → CameraStatus.
+     * "Disconnected" проверяем раньше "Connected", т.к. содержит подстроку.
+     */
+    private static CameraStatus mapConnectionToStatus(String connection) {
+        if (connection == null || connection.isBlank()) return CameraStatus.UNKNOWN;
+        String lower = connection.toLowerCase(Locale.ROOT).trim();
+        if (lower.contains("disconnect"))                             return CameraStatus.OFFLINE;
+        if (lower.contains("needs attention") || lower.contains("error")) return CameraStatus.OFFLINE;
+        if (lower.contains("connect"))                                return CameraStatus.ONLINE;
+        return CameraStatus.UNKNOWN;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (status == null) status = CameraStatus.UNKNOWN;
     }
 
     @PreUpdate
     void onUpdate() { updatedAt = Instant.now(); }
 
-    /** Результат diff: было/стало для connection-статуса. */
     public record CameraSnapshotDiff(String previousConnection, String currentConnection) {
         public boolean isDegradedTransition() {
             return "Connected".equalsIgnoreCase(previousConnection)
