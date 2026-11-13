@@ -5,45 +5,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.trassir.api.event.TrassirObjectsSnapshotReceived;
-import ru.agroeco.pulse.videoserver.adapter.persistence.CameraRepository;
-import ru.agroeco.pulse.videoserver.adapter.persistence.ChannelRepository;
-import ru.agroeco.pulse.videoserver.adapter.persistence.VideoServerRepository;
+import ru.agroeco.pulse.videoserver.adapter.persistence.*;
 import ru.agroeco.pulse.videoserver.domain.*;
+import ru.agroeco.pulse.videoserver.domain.event.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 
-/**
- * Reconciliation inventory из agent.objects_snapshot.
- *
- * <p>Структура объекта в envelope TRASSIR (v2.0, с enrichment):</p>
- * <pre>
- * {
- *   "class_name": "Channel" | "IP Device",
- *   "object_id": "A09M5rCx",
- *   "parent_id": "tkcbkSr1C",           // ВСЕГДА Folder, НЕ используем для parent
- *   "values": {
- *     "ip_device_id": "CKxYAfh6",       // для Channel: ссылка на IP Device
- *     "channel_ids": ["A09M5rCx"],      // для IP Device: обратные ссылки на Channel
- *     ...
- *   }
- * }
- * </pre>
- *
- * <p><b>Стратегия разрешения parent:</b></p>
- * <ol>
- *   <li>{@code values.ip_device_id} — прямое поле в Channel (enriched snapshots)</li>
- *   <li>Обратная карта из {@code IP Device.values.channel_ids} → {@code IP Device.object_id}</li>
- *   <li>Никогда не используем top-level {@code parent_id} — в TRASSIR 2.0 это Folder</li>
- * </ol>
- *
- * <p><b>Snapshots без enrichment</b> (Channel без {@code values.ip_device_id} + IP Device
- * без {@code values.channel_ids}) — каналы пропускаются с WARN. Следующий snapshot с
- * enrichment их создаст.</p>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -51,24 +25,25 @@ public class ReconcileVideoServersInventoryUseCase {
 
     private static final String CLASS_IP_DEVICE = "IP Device";
     private static final String CLASS_CHANNEL   = "Channel";
+    private static final String CLASS_SERVER    = "Server";
 
     private final VideoServerRepository servers;
     private final CameraRepository cameras;
     private final ChannelRepository channels;
+    private final VideoServerHealthRepository healths;
+    private final EventDispatcher events;
     private final ObjectMapper objectMapper;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(TrassirObjectsSnapshotReceived event) {
-        Optional<VideoServer> opt = servers.findById(event.serverId());
-        if (opt.isEmpty()) {
-            log.warn("Snapshot for unknown serverId={} — skipping (configure POST /servers first)",
-                    event.serverId());
+        Optional<VideoServer> serverOpt = servers.findById(event.serverId());
+        if (serverOpt.isEmpty()) {
+            log.warn("Snapshot for unknown serverId={} — skipping", event.serverId());
             return;
         }
-        VideoServer server = opt.get();
+        VideoServer server = serverOpt.get();
         if (!"trassir".equals(server.getSource())) {
-            log.warn("Snapshot for serverId={} with source='{}' — skipping (expected 'trassir')",
-                    event.serverId(), server.getSource());
+            log.warn("Snapshot for serverId={} source='{}' — skipping", event.serverId(), server.getSource());
             return;
         }
 
@@ -77,24 +52,19 @@ public class ReconcileVideoServersInventoryUseCase {
 
         Instant seenAt = event.receivedAt();
 
-        // =========================================================
-        // 0. Pre-pass: разобрать все объекты, построить reverse-map
-        //    channelObjectKey -> ipDeviceObjectKey (из IP Device.values.channel_ids)
-        // =========================================================
+        // 0. Парсинг + reverse-map
         Map<String, JsonNode> payloadByKey = new HashMap<>();
-        Map<String, String> ipDeviceByObjectKey = new HashMap<>();   // object_key -> class_name (IP Device)
-        Map<String, String> channelToDevice = new HashMap<>();       // channel.object_id -> IP Device.object_id
+        Map<String, String> ipDeviceByObjectKey = new HashMap<>();
+        Map<String, String> channelToDevice = new HashMap<>();
+        JsonNode serverPayload = null;
 
         for (var obj : event.objects()) {
             if (obj.objectKey() == null || obj.objectKey().isBlank()) continue;
             JsonNode payload = parsePayload(obj.payloadJson());
             payloadByKey.put(obj.objectKey(), payload);
-
             String className = textOrNull(payload, "class_name");
             if (CLASS_IP_DEVICE.equals(className)) {
                 ipDeviceByObjectKey.put(obj.objectKey(), className);
-
-                // IP Device.values.channel_ids — обратные ссылки на Channel
                 JsonNode values = payload.get("values");
                 if (values != null && values.isObject()) {
                     JsonNode chIds = values.get("channel_ids");
@@ -106,14 +76,20 @@ public class ReconcileVideoServersInventoryUseCase {
                         }
                     }
                 }
+            } else if (CLASS_SERVER.equals(className)) {
+                serverPayload = payload;
             }
         }
 
-        // =========================================================
-        // 1. IP Device → Camera
-        // =========================================================
+        // 1. server_health
+        if (serverPayload != null) {
+            reconcileServerHealth(event.serverId(), serverPayload, seenAt);
+        }
+
+        // 2. IP Device → Camera (с diff-событиями)
         Set<String> seenCameraKeys = new HashSet<>();
         int createdCameras = 0, updatedCameras = 0;
+        int camOffline = 0, camOnline = 0, camDegraded = 0, camRecovered = 0;
 
         for (var obj : event.objects()) {
             JsonNode payload = payloadByKey.get(obj.objectKey());
@@ -122,181 +98,243 @@ public class ReconcileVideoServersInventoryUseCase {
 
             seenCameraKeys.add(obj.objectKey());
 
-            String name        = textOr(payload, "name", obj.objectKey());
-            String code        = textOrNull(payload, "code");
+            JsonNode v = payload.get("values");
+            String name = textOr(payload, "name", obj.objectKey());
+            String code = textOrNull(payload, "code");
             String description = textOrNull(payload, "description");
+            String connection = v != null ? textOrNull(v, "connection") : null;
+            String ipAddress  = v != null ? textOrNull(v, "connection_ip") : null;
+            String model      = v != null ? textOrNull(v, "model") : null;
+            String family     = v != null ? textOrNull(v, "family") : null;
 
-            var existing = cameras.findByVideoServerIdAndExternalId(event.serverId(), obj.objectKey());
-            if (existing.isPresent()) {
-                existing.get().applySnapshot(name, code, description, seenAt);
-                cameras.save(existing.get());
-                updatedCameras++;
-            } else {
-                Camera camera = new Camera(
-                        UUID.randomUUID(), event.serverId(), "trassir", obj.objectKey(),
+            var existingOpt = cameras.findByVideoServerIdAndExternalId(event.serverId(), obj.objectKey());
+            Camera camera;
+            Camera.CameraSnapshotDiff diff;
+            boolean isNew = existingOpt.isEmpty();
+
+            if (isNew) {
+                camera = new Camera(UUID.randomUUID(), event.serverId(), "trassir", obj.objectKey(),
                         code, name, description, null, true);
-                camera.applySnapshot(name, code, description, seenAt);
+                diff = camera.applySnapshotWithDiff(name, code, description, seenAt,
+                        connection, ipAddress, model, family);
                 cameras.save(camera);
                 createdCameras++;
+            } else {
+                camera = existingOpt.get();
+                diff = camera.applySnapshotWithDiff(name, code, description, seenAt,
+                        connection, ipAddress, model, family);
+                cameras.save(camera);
+                updatedCameras++;
+            }
+
+            // derived events — только для существующих камер (не для первой встречи)
+            if (!isNew) {
+                if (diff.isOffline() && !"Disconnected".equalsIgnoreCase(diff.previousConnection())) {
+                    events.dispatch(CameraOffline.builder()
+                            .cameraId(camera.getId()).videoServerId(event.serverId())
+                            .externalId(camera.getExternalId()).cameraName(camera.getName())
+                            .connectionStatus(connection).lastSeenAt(seenAt)
+                            .occurredAt(seenAt).build());
+                    camOffline++;
+                } else if (diff.isRecoveryTransition()) {
+                    events.dispatch(CameraOnline.builder()
+                            .cameraId(camera.getId()).videoServerId(event.serverId())
+                            .externalId(camera.getExternalId()).cameraName(camera.getName())
+                            .lastSeenAt(seenAt).occurredAt(seenAt).build());
+                    camOnline++;
+                } else if (diff.isDegradedTransition()) {
+                    events.dispatch(CameraDegraded.builder()
+                            .cameraId(camera.getId()).videoServerId(event.serverId())
+                            .externalId(camera.getExternalId()).cameraName(camera.getName())
+                            .previousStatus(diff.previousConnection()).currentStatus(connection)
+                            .occurredAt(seenAt).build());
+                    camDegraded++;
+                }
             }
         }
         cameras.flush();
 
-        // =========================================================
-        // 2. Channel → Channel (parent resolution)
-        // =========================================================
+        // 3. Channel → Channel (с diff-событиями)
         Set<String> seenChannelKeys = new HashSet<>();
         int createdChannels = 0, updatedChannels = 0, skippedChannels = 0;
-        int resolvedViaValues = 0, resolvedViaReverseMap = 0;
+        int streamLost = 0, streamRestored = 0, recordingStopped = 0;
 
         for (var obj : event.objects()) {
             JsonNode payload = payloadByKey.get(obj.objectKey());
             if (payload == null) continue;
             if (!CLASS_CHANNEL.equals(textOrNull(payload, "class_name"))) continue;
 
-            // Resolve parent (IP Device object_key)
-            ParentResolution parent = resolveChannelParent(obj.objectKey(), payload,
-                    ipDeviceByObjectKey, channelToDevice);
+            JsonNode v = payload.get("values");
+            String parentKey = v != null ? textOrNull(v, "ip_device_id") : null;
+            if (parentKey == null) parentKey = channelToDevice.get(obj.objectKey());
 
-            if (parent.key() == null) {
-                log.warn("Channel {} has no resolvable IP Device (values.ip_device_id missing, "
-                                + "no reverse-map entry from IP Device.values.channel_ids) — skipping. "
-                                + "Will be created on next enriched snapshot.",
-                        obj.objectKey());
+            if (parentKey == null) {
+                log.warn("Channel {} has no resolvable IP Device — skipping", obj.objectKey());
                 skippedChannels++;
                 continue;
             }
-            if (parent.via() == ParentResolution.Via.VALUES) resolvedViaValues++;
-            else if (parent.via() == ParentResolution.Via.REVERSE_MAP) resolvedViaReverseMap++;
+            var cameraOpt = cameras.findByVideoServerIdAndExternalId(event.serverId(), parentKey);
+            if (cameraOpt.isEmpty()) { skippedChannels++; continue; }
 
-            var cameraOpt = cameras.findByVideoServerIdAndExternalId(event.serverId(), parent.key());
-            if (cameraOpt.isEmpty()) {
-                log.warn("Channel {} references IP Device {} which is not in cameras "
-                                + "(device must be in same snapshot) — skipping",
-                        obj.objectKey(), parent.key());
-                skippedChannels++;
-                continue;
-            }
             UUID cameraId = cameraOpt.get().getId();
             seenChannelKeys.add(obj.objectKey());
 
-            String name          = textOr(payload, "name", obj.objectKey());
+            String name = textOr(payload, "name", obj.objectKey());
             ChannelStatus status = parseStatus(textOrNull(payload, "status"));
+            Boolean signal = v != null && v.has("signal") ? v.get("signal").asInt() != 0 : null;
+            Boolean recordingLocal = v != null && v.has("recording_local") ? v.get("recording_local").asInt() != 0 : null;
+            String grabberError = v != null ? textOrNull(v, "grabber_error") : null;
+            Float fpsMain = v != null && v.has("fps_main") ? (float) v.get("fps_main").asDouble() : null;
+            Float kbpsMain = v != null && v.has("kbps_main") ? (float) v.get("kbps_main").asDouble() : null;
 
-            var existing = channels.findByCameraIdAndExternalId(cameraId, obj.objectKey());
-            if (existing.isPresent()) {
-                existing.get().applySnapshot(name, status, seenAt);
-                channels.save(existing.get());
-                updatedChannels++;
-            } else {
-                Channel channel = new Channel(
-                        UUID.randomUUID(), cameraId, obj.objectKey(), name, status, true);
-                channel.applySnapshot(name, status, seenAt);
+            var existingOpt = channels.findByCameraIdAndExternalId(cameraId, obj.objectKey());
+            Channel channel;
+            Channel.ChannelSnapshotDiff diff;
+            boolean isNew = existingOpt.isEmpty();
+
+            if (isNew) {
+                channel = new Channel(UUID.randomUUID(), cameraId, obj.objectKey(), name, status, true);
+                diff = channel.applySnapshotWithDiff(name, status, seenAt,
+                        signal, recordingLocal, grabberError, fpsMain, kbpsMain);
                 channels.save(channel);
                 createdChannels++;
+            } else {
+                channel = existingOpt.get();
+                diff = channel.applySnapshotWithDiff(name, status, seenAt,
+                        signal, recordingLocal, grabberError, fpsMain, kbpsMain);
+                channels.save(channel);
+                updatedChannels++;
             }
-        }
 
-        // =========================================================
-        // 3. Soft-delete
-        // =========================================================
-        int deactivatedCameras = 0, deactivatedChannels = 0;
-
-        if (!seenCameraKeys.isEmpty()) {
-            deactivatedCameras = cameras.softDeleteMissingForServer(
-                    event.serverId(), seenCameraKeys, seenAt);
-        } else if (!event.objects().isEmpty()) {
-            log.warn("Snapshot for serverId={} contains no '{}' — skipping camera soft-delete",
-                    event.serverId(), CLASS_IP_DEVICE);
-        }
-
-        if (!seenChannelKeys.isEmpty()) {
-            deactivatedChannels = channels.softDeleteMissingForServer(
-                    event.serverId(), seenChannelKeys, seenAt);
-        } else if (skippedChannels > 0) {
-            // Snapshot содержит Channel, но ни один не разрешён → не трогаем каналы,
-            // чтобы не удалить существующие из-за неполного snapshot
-            log.warn("Snapshot for serverId={} has {} channels but none resolvable — "
-                            + "skipping channel soft-delete (incomplete enrichment)",
-                    event.serverId(), skippedChannels);
-        }
-
-        log.info("Reconciled server={}: cameras(created={}, updated={}, deactivated={}), "
-                        + "channels(created={}, updated={}, skipped={}, deactivated={}, "
-                        + "via_values={}, via_reverse_map={})",
-                event.serverId(),
-                createdCameras, updatedCameras, deactivatedCameras,
-                createdChannels, updatedChannels, skippedChannels, deactivatedChannels,
-                resolvedViaValues, resolvedViaReverseMap);
-    }
-
-    // ---------------------------------------------------------------- helpers
-
-    private record ParentResolution(String key, Via via) {
-        enum Via { VALUES, REVERSE_MAP, NONE }
-        static ParentResolution none() { return new ParentResolution(null, Via.NONE); }
-    }
-
-    /**
-     * Разрешить parent (IP Device object_key) для Channel.
-     * Порядок: values.ip_device_id → reverse-map из IP Device.values.channel_ids.
-     * Top-level parent_id НЕ используем: в TRASSIR 2.0 он указывает на Folder.
-     */
-    private ParentResolution resolveChannelParent(String channelObjectKey,
-                                                  JsonNode channelPayload,
-                                                  Map<String, String> ipDeviceByObjectKey,
-                                                  Map<String, String> channelToDevice) {
-        // 1. values.ip_device_id
-        JsonNode values = channelPayload.get("values");
-        if (values != null && values.isObject()) {
-            String v = textOrNull(values, "ip_device_id");
-            if (v != null && ipDeviceByObjectKey.containsKey(v)) {
-                return new ParentResolution(v, ParentResolution.Via.VALUES);
-            }
-            // альтернативные имена в values (на случай других версий агента)
-            for (String alt : List.of("ip_device", "device_id", "camera_id")) {
-                String altV = textOrNull(values, alt);
-                if (altV != null && ipDeviceByObjectKey.containsKey(altV)) {
-                    return new ParentResolution(altV, ParentResolution.Via.VALUES);
+            if (!isNew) {
+                if (diff.isStreamLost()) {
+                    events.dispatch(ChannelStreamLost.builder()
+                            .channelId(channel.getId()).cameraId(cameraId).videoServerId(event.serverId())
+                            .channelExternalId(channel.getExternalId()).channelName(channel.getName())
+                            .occurredAt(seenAt).build());
+                    streamLost++;
+                }
+                if (diff.isStreamRestored()) {
+                    events.dispatch(ChannelStreamRestored.builder()
+                            .channelId(channel.getId()).cameraId(cameraId).videoServerId(event.serverId())
+                            .channelExternalId(channel.getExternalId()).channelName(channel.getName())
+                            .occurredAt(seenAt).build());
+                    streamRestored++;
+                }
+                if (diff.isRecordingStopped()) {
+                    events.dispatch(ChannelRecordingStopped.builder()
+                            .channelId(channel.getId()).cameraId(cameraId).videoServerId(event.serverId())
+                            .channelExternalId(channel.getExternalId()).channelName(channel.getName())
+                            .occurredAt(seenAt).build());
+                    recordingStopped++;
                 }
             }
         }
 
-        // 2. Reverse-map из IP Device.values.channel_ids
-        String fromMap = channelToDevice.get(channelObjectKey);
-        if (fromMap != null && ipDeviceByObjectKey.containsKey(fromMap)) {
-            return new ParentResolution(fromMap, ParentResolution.Via.REVERSE_MAP);
+        // 4. soft-delete
+        int deactivatedCameras = 0, deactivatedChannels = 0;
+        if (!seenCameraKeys.isEmpty()) {
+            deactivatedCameras = cameras.softDeleteMissingForServer(event.serverId(), seenCameraKeys, seenAt);
+        }
+        if (!seenChannelKeys.isEmpty()) {
+            deactivatedChannels = channels.softDeleteMissingForServer(event.serverId(), seenChannelKeys, seenAt);
         }
 
-        return ParentResolution.none();
+        log.info("Reconciled server={}: cameras(created={},updated={},deactivated={}), "
+                        + "channels(created={},updated={},skipped={},deactivated={}), "
+                        + "derived(cam_offline={},cam_online={},cam_degraded={},stream_lost={},stream_restored={},rec_stopped={})",
+                event.serverId(),
+                createdCameras, updatedCameras, deactivatedCameras,
+                createdChannels, updatedChannels, skippedChannels, deactivatedChannels,
+                camOffline, camOnline, camDegraded, streamLost, streamRestored, recordingStopped);
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private void reconcileServerHealth(UUID serverId, JsonNode serverPayload, Instant seenAt) {
+        JsonNode values = serverPayload.get("values");
+        if (values == null || !values.isObject()) return;
+
+        VideoServerHealth health = healths.findById(serverId)
+                .orElseGet(() -> VideoServerHealth.forServer(serverId));
+
+        Map<String, Object> raw = objectMapper.convertValue(values, Map.class);
+
+        health.apply(seenAt,
+                textOrNull(serverPayload, "name"),
+                parseMicroseconds(textOrNull(values, "startup_ts")),
+                boolValue(values, "server_ok"),
+                floatValue(values, "cpu_usage"),
+                floatValue(values, "gpu_usage"),
+                boolValue(values, "db_connected"),
+                boolValue(values, "db_is_slow"),
+                textOrNull(values, "db_last_error"),
+                intValue(values, "scripts_ok"),
+                intValue(values, "scripts_total"),
+                intValue(values, "disks_error_count"),
+                boolValue(values, "disks_is_slow"),
+                textOrNull(values, "disks_last_error"),
+                floatValue(values, "disks_stat_main_days"),
+                floatValue(values, "disks_stat_subs_days"),
+                intValue(values, "ip_devices_total"),
+                intValue(values, "ip_devices_connected"),
+                intValue(values, "channels_network_total"),
+                intValue(values, "channels_network_online"),
+                boolValue(values, "network_should_be_connected"),
+                boolValue(values, "network_really_connected"),
+                textOrNull(values, "network_last_error"),
+                raw);
+        healths.save(health);
     }
 
     private ChannelStatus parseStatus(String raw) {
         if (raw == null || raw.isBlank()) return null;
-        try {
-            return ChannelStatus.valueOf(raw.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            return ChannelStatus.UNKNOWN;
-        }
+        try { return ChannelStatus.valueOf(raw.trim().toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException e) { return ChannelStatus.UNKNOWN; }
     }
 
     private JsonNode parsePayload(String json) {
-        try {
-            return objectMapper.readTree(json);
-        } catch (Exception e) {
-            log.warn("Cannot parse snapshot payload: {}", e.getMessage());
-            return objectMapper.createObjectNode();
-        }
+        try { return objectMapper.readTree(json); }
+        catch (Exception e) { return objectMapper.createObjectNode(); }
     }
 
     private String textOr(JsonNode n, String field, String fallback) {
-        String v = textOrNull(n, field);
-        return v == null ? fallback : v;
+        String v = textOrNull(n, field); return v == null ? fallback : v;
     }
 
     private String textOrNull(JsonNode n, String field) {
         if (n == null) return null;
         JsonNode v = n.get(field);
         return v != null && v.isString() && !v.asString().isBlank() ? v.asString() : null;
+    }
+
+    private Boolean boolValue(JsonNode n, String f) {
+        if (n == null) return null;
+        JsonNode v = n.get(f);
+        if (v == null || v.isNull()) return null;
+        if (v.isBoolean()) return v.asBoolean();
+        if (v.isInt()) return v.asInt() != 0;
+        return null;
+    }
+
+    private Float floatValue(JsonNode n, String f) {
+        if (n == null) return null;
+        JsonNode v = n.get(f);
+        return v != null && v.isNumber() ? (float) v.asDouble() : null;
+    }
+
+    private Integer intValue(JsonNode n, String f) {
+        if (n == null) return null;
+        JsonNode v = n.get(f);
+        return v != null && v.isNumber() ? v.asInt() : null;
+    }
+
+    private Instant parseMicroseconds(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            long micros = Long.parseLong(raw.trim());
+            if (micros <= 0) return null;
+            return Instant.ofEpochSecond(micros / 1_000_000L, (micros % 1_000_000L) * 1_000L);
+        } catch (Exception e) { return null; }
     }
 }

@@ -101,6 +101,14 @@ app:
       INCIDENT_MATERIAL_DELETED:     ${app.kafka.topic.incident-events}
       INCIDENT_MATERIAL_DOWNLOADED:  ${app.kafka.topic.incident-events}
       VIDEO_EVENT_INGESTED:          ${app.kafka.topic.video-events}
+      # derived videoserver events (из state-diff)
+      CAMERA_OFFLINE: ${app.kafka.topic.video-events}
+      CAMERA_ONLINE: ${app.kafka.topic.video-events}
+      CAMERA_DEGRADED: ${app.kafka.topic.video-events}
+      CAMERA_RECOVERED: ${app.kafka.topic.video-events}
+      CHANNEL_STREAM_LOST: ${app.kafka.topic.video-events}
+      CHANNEL_STREAM_RESTORED: ${app.kafka.topic.video-events}
+      CHANNEL_RECORDING_STOPPED: ${app.kafka.topic.video-events}
 
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173}
@@ -164,7 +172,7 @@ springdoc:
 logging:
   level:
     root: INFO
-    ru.agroeco.pulse: DEBUG
+    ru.agroeco.pulse: INFO
     # FIX #34: org.hibernate.SQL=DEBUG и orm.jdbc.bind=TRACE удалены из base —
     # это утечка SQL-параметров (включая password_hash при логине).
     # Включаются только в application-local.yml.

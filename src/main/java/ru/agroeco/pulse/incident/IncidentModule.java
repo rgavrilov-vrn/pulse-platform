@@ -1,5 +1,3 @@
-package ru.agroeco.pulse.incident;
-
 import org.springframework.modulith.ApplicationModule;
 
 @ApplicationModule(

@@ -91,6 +91,23 @@ public class VideoServer {
         this.isActive = false;
     }
 
+    public void updateManually(String name, String host, String baseUrl, String description,
+                               UUID objectId, UUID zoneId, Boolean isActive) {
+        this.name = name;
+        this.host = host;
+        this.baseUrl = baseUrl;
+        this.description = description;
+        if (objectId != null) this.objectId = objectId;
+        if (zoneId != null)   this.zoneId = zoneId;
+        if (isActive != null) this.isActive = isActive;
+    }
+
+    public void softDeleteManually(Instant at) {
+        this.deletedAt = at;
+        this.deactivatedBy = "manual";
+        this.isActive = false;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();

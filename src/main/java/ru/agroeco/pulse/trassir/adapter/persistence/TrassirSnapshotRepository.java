@@ -1,6 +1,8 @@
 package ru.agroeco.pulse.trassir.adapter.persistence;
 
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -15,8 +17,7 @@ import java.util.UUID;
 
 public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot, UUID> {
 
-    Optional<TrassirSnapshot> findByServerIdAndExternalSnapshotId(
-            UUID serverId, UUID externalSnapshotId);
+    Optional<TrassirSnapshot> findByServerIdAndExternalSnapshotId(UUID serverId, UUID externalSnapshotId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM TrassirSnapshot s WHERE s.id = :id")
@@ -29,8 +30,6 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
                 total_parts, received_at, status, retry_count)
             VALUES
                 (:id, :externalSnapshotId, :serverId, :serverId,
-                -- FIX #139: epoch-millis — монотонно растёт, уникально для snapshot'ов
-                -- одного stream'а. Раньше всегда было 0 (dead field).
                 (EXTRACT(EPOCH FROM now()) * 1000)::bigint,
                 :totalParts, :receivedAt, 'PENDING', 0)
             ON CONFLICT (external_snapshot_id) DO NOTHING
@@ -41,10 +40,6 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
                        @Param("totalParts") Integer totalParts,
                        @Param("receivedAt") Instant receivedAt);
 
-    /**
-     * FIX #137: без FOR UPDATE — короткий read для retry-worker.
-     * Конкурентность ограничивает advisory lock в assemble().
-     */
     @Query(value = """
         SELECT * FROM trassir.snapshots
         WHERE status = 'FAILED' AND next_retry_at <= :now AND completed_at IS NULL
@@ -85,6 +80,19 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
     int markDeadLetter(@Param("id") UUID id);
 
     long countByStatus(String status);
+
+    @Query("""
+            SELECT s FROM TrassirSnapshot s
+            WHERE (:serverId IS NULL OR s.serverId = :serverId)
+              AND (:status IS NULL OR s.status = :status)
+              AND (:from IS NULL OR s.receivedAt >= :from)
+              AND (:to   IS NULL OR s.receivedAt <= :to)
+            """)
+    Page<TrassirSnapshot> search(@Param("serverId") UUID serverId,
+                                 @Param("status") String status,
+                                 @Param("from") Instant from,
+                                 @Param("to") Instant to,
+                                 Pageable pageable);
 
     @Modifying
     @Query("delete from TrassirSnapshot snapshot")

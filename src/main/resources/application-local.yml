@@ -40,8 +40,8 @@ goodwan:
 logging:
   # FIX #34: SQL-логи — только в local.
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: DEBUG
-    org.springframework.http.converter.json: DEBUG
+    org.hibernate.SQL: INFO
+    org.hibernate.orm.jdbc.bind: INFO
+    org.springframework.http.converter.json: INFO
   pattern:
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} --- [%t] %clr(%logger{36}){cyan} : %m%n%wEx"

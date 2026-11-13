@@ -1,5 +1,7 @@
 package ru.agroeco.pulse.trassir.adapter.persistence;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -13,13 +15,6 @@ import java.util.UUID;
 
 public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID> {
 
-    /**
-     * Идемпотентная вставка события (FIX #27, партия 3).
-     * Если event_id уже есть — пропускаем без ошибки.
-     *
-     * ВАЖНО: этот метод был случайно удалён при переписывании репозитория
-     * в партии 7 (FIX #137) — восстановлен.
-     */
     @Modifying
     @Query(value = """
         INSERT INTO trassir.events
@@ -44,12 +39,6 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
                        @Param("data") String data,
                        @Param("rawEvent") String rawEvent);
 
-    /**
-     * FIX #137: без FOR UPDATE. Раньше lockProcessable (FOR UPDATE SKIP LOCKED)
-     * удерживал блокировки в outer-транзакции, а REQUIRES_NEW retry-worker'а
-     * пытался UPDATE те же строки — deadlock. Конкурентность ограничивается
-     * pg_try_advisory_xact_lock в TrassirEventProcessor.processById.
-     */
     @Query(value = """
         SELECT * FROM trassir.events
         WHERE (status = 'FAILED' AND next_retry_at <= :now)
@@ -62,6 +51,21 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
 
     @Query(value = "SELECT pg_try_advisory_xact_lock(hashtext(:key))", nativeQuery = true)
     Boolean tryAdvisoryLock(@Param("key") String key);
+
+    @Query("""
+            SELECT e FROM TrassirEvent e
+            WHERE (:serverId IS NULL OR e.serverId = :serverId)
+              AND (:eventType IS NULL OR e.eventType = :eventType)
+              AND (:status IS NULL OR e.status = :status)
+              AND (:from IS NULL OR e.createdAt >= :from)
+              AND (:to   IS NULL OR e.createdAt <= :to)
+            """)
+    Page<TrassirEvent> search(@Param("serverId") UUID serverId,
+                              @Param("eventType") String eventType,
+                              @Param("status") String status,
+                              @Param("from") Instant from,
+                              @Param("to") Instant to,
+                              Pageable pageable);
 
     @Modifying
     @Query("delete from TrassirEvent event where event.createdAt < :cutoff and event.status in ('PROCESSED','DEAD_LETTER')")

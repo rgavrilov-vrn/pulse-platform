@@ -71,4 +71,27 @@ public class TrassirMetrics {
     public void incrementSnapshotDeadLetter() {
         registry.counter("trassir_snapshots_dead_letter_total").increment();
     }
+    /** Prometheus-метрики из videoserver.server_health (после reconcile). */
+    public void recordServerHealth(String serverId,
+                                   Boolean serverOk, Float disksMainDays,
+                                   Integer ipTotal, Integer ipConnected) {
+        if (serverOk != null) {
+            registry.gauge("trassir_server_ok",
+                    io.micrometer.core.instrument.Tags.of("server", serverId),
+                    serverOk ? 1.0 : 0.0);
+        }
+        if (disksMainDays != null) {
+            registry.gauge("trassir_disks_main_days",
+                    io.micrometer.core.instrument.Tags.of("server", serverId),
+                    disksMainDays);
+        }
+        if (ipTotal != null && ipConnected != null) {
+            registry.gauge("trassir_ip_devices_total",
+                    io.micrometer.core.instrument.Tags.of("server", serverId),
+                    ipTotal);
+            registry.gauge("trassir_ip_devices_connected",
+                    io.micrometer.core.instrument.Tags.of("server", serverId),
+                    ipConnected);
+        }
+    }
 }
