@@ -18,10 +18,8 @@ public interface CameraRepository
 
     Optional<Camera> findByVideoServerIdAndExternalId(UUID videoServerId, String externalId);
 
-    /**
-     * Soft-delete камер сервера, отсутствующих в snapshot.
-     * НЕ трогает камеры с deactivated_by='manual' (админ отключил вручную).
-     */
+    Optional<Camera> findByExternalId(String externalId);
+
     @Modifying
     @Query("""
             UPDATE Camera c

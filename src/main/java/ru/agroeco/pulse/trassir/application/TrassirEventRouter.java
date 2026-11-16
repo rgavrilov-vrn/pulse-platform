@@ -16,13 +16,15 @@ public class TrassirEventRouter {
                               ApplyAgentHeartbeatUseCase heartbeat,
                               ProcessTrassirObjectsSnapshotUseCase snapshot,
                               ApplyTrassirSystemEventUseCase systemEvent,
-                              ApplyTrassirVideoEventUseCase videoEvent) {
+                              ApplyTrassirVideoEventUseCase videoEvent,
+                              ApplyTrassirManualIncidentUseCase manualIncident) {
         this.metrics = metrics;
         this.handlers = Map.of(
-                "agent.heartbeat",        heartbeat,
-                "agent.objects_snapshot", snapshot,
-                "trassir.system_event",   systemEvent,
-                "trassir.video_event",    videoEvent
+                "agent.heartbeat",         heartbeat,
+                "agent.objects_snapshot",  snapshot,
+                "trassir.system_event",    systemEvent,
+                "trassir.video_event",     videoEvent,
+                "trassir.incident_manual", manualIncident
         );
     }
 

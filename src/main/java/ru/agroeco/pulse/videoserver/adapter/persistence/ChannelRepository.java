@@ -18,11 +18,8 @@ public interface ChannelRepository
 
     Optional<Channel> findByCameraIdAndExternalId(UUID cameraId, String externalId);
 
-    /**
-     * Soft-delete (is_active=false) каналов сервера, отсутствующих в snapshot.
-     * Каналы ищутся через cameras.video_server_id.
-     * НЕ выставляет deleted_at — в channels нет такого поля (is_active достаточно).
-     */
+    Optional<Channel> findByExternalId(String externalId);
+
     @Modifying
     @Query("""
             UPDATE Channel ch

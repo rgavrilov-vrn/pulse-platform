@@ -5,5 +5,6 @@ public enum VideoEventType {
     CAMERA_OFFLINE,
     CAMERA_TAMPERING,
     VIDEO_EVENT_RECEIVED,
+    MANUAL_INCIDENT,
     UNKNOWN
 }

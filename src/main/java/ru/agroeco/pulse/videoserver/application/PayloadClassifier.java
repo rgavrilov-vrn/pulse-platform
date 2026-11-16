@@ -29,11 +29,10 @@ public class PayloadClassifier {
     public static VideoEventType mapSubtype(String subtype) {
         if (subtype == null || subtype.isBlank()) return VideoEventType.UNKNOWN;
         return switch (subtype.toLowerCase().trim()) {
-            case "motion", "motion_detected"                          -> VideoEventType.MOTION_DETECTED;
-            case "offline", "camera_offline", "connection lost"       -> VideoEventType.CAMERA_OFFLINE;
-            case "tamper", "tampering", "camera_tampering"            -> VideoEventType.CAMERA_TAMPERING;
-            // Событие "Connection Established" не имеет своего типа в enum, используем дефолтный
-            case "connection established"                             -> VideoEventType.VIDEO_EVENT_RECEIVED;
+            case "motion", "motion_detected" -> VideoEventType.MOTION_DETECTED;
+            case "offline", "camera_offline", "connection lost" -> VideoEventType.CAMERA_OFFLINE;
+            case "tamper", "tampering", "camera_tampering" -> VideoEventType.CAMERA_TAMPERING;
+            case "manual_incident" -> VideoEventType.MANUAL_INCIDENT;
             default -> VideoEventType.VIDEO_EVENT_RECEIVED;
         };
     }
@@ -47,6 +46,5 @@ public class PayloadClassifier {
         };
     }
 
-    public record Classification(VideoEventType type, EventSeverity severity) {
-    }
+    public record Classification(VideoEventType type, EventSeverity severity) {}
 }
