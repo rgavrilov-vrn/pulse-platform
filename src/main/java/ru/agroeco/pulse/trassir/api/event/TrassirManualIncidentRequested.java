@@ -16,6 +16,7 @@ public record TrassirManualIncidentRequested(
         String reason,
         String videoTimestamp,
         String imageFile,
+        String videoServerBaseUrl,
         Instant occurredAt
 ) implements IntegrationEvent {
 

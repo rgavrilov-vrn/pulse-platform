@@ -17,19 +17,14 @@ import java.time.Duration;
 public class TrassirScreenshotClient {
 
     private final HttpClient httpClient;
-    private final String baseUrl;
     private final String password;
     private final Duration readTimeout;
 
     public TrassirScreenshotClient(
-            @Value("${trassir.screenshot.base-url:https://10.81.0.82:8080}") String baseUrl,
             @Value("${trassir.screenshot.password:Script}") String password,
             @Value("${trassir.screenshot.connect-timeout:PT3S}") Duration connectTimeout,
             @Value("${trassir.screenshot.read-timeout:PT10S}") Duration readTimeout
     ) {
-        this.baseUrl = baseUrl.endsWith("/")
-                ? baseUrl.substring(0, baseUrl.length() - 1)
-                : baseUrl;
         this.password = password;
         this.readTimeout = readTimeout;
         this.httpClient = HttpClient.newBuilder()
@@ -37,8 +32,16 @@ public class TrassirScreenshotClient {
                 .build();
     }
 
-    public byte[] download(String objectId, String videoTimestamp) {
-        String uri = baseUrl + "/screenshot/"
+    public byte[] download(
+            String videoServerBaseUrl,
+            String objectId,
+            String videoTimestamp
+    ) {
+        String normalizedBaseUrl = videoServerBaseUrl.endsWith("/")
+                ? videoServerBaseUrl.substring(0, videoServerBaseUrl.length() - 1)
+                : videoServerBaseUrl;
+
+        String uri = normalizedBaseUrl + "/screenshot/"
                 + URLEncoder.encode(objectId, StandardCharsets.UTF_8)
                 + "?timestamp=" + URLEncoder.encode(videoTimestamp, StandardCharsets.UTF_8)
                 + "&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8);
@@ -57,16 +60,21 @@ public class TrassirScreenshotClient {
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException(
-                        "Trassir screenshot request failed: status=%d, objectId=%s, timestamp=%s"
-                                .formatted(response.statusCode(), objectId, videoTimestamp)
+                        "Trassir screenshot request failed: status=%d, baseUrl=%s, objectId=%s, timestamp=%s"
+                                .formatted(
+                                        response.statusCode(),
+                                        normalizedBaseUrl,
+                                        objectId,
+                                        videoTimestamp
+                                )
                 );
             }
 
             byte[] body = response.body();
             if (body == null || body.length == 0) {
                 throw new IllegalStateException(
-                        "Trassir returned an empty screenshot: objectId=%s, timestamp=%s"
-                                .formatted(objectId, videoTimestamp)
+                        "Trassir returned an empty screenshot: baseUrl=%s, objectId=%s, timestamp=%s"
+                                .formatted(normalizedBaseUrl, objectId, videoTimestamp)
                 );
             }
 
@@ -79,8 +87,8 @@ public class TrassirScreenshotClient {
             );
         } catch (Exception e) {
             throw new IllegalStateException(
-                    "Failed to download Trassir screenshot: objectId=%s, timestamp=%s"
-                            .formatted(objectId, videoTimestamp),
+                    "Failed to download Trassir screenshot: baseUrl=%s, objectId=%s, timestamp=%s"
+                            .formatted(normalizedBaseUrl, objectId, videoTimestamp),
                     e
             );
         }

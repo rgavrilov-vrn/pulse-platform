@@ -21,12 +21,23 @@ public class TrassirScreenshotAttachmentService {
 
     public void attachScreenshot(
             UUID incidentId,
+            String videoServerBaseUrl,
             String objectId,
             String videoTimestamp,
             String imageFile
     ) {
         try {
-            byte[] image = screenshotClient.download(objectId, videoTimestamp);
+            if (videoServerBaseUrl == null || videoServerBaseUrl.isBlank()) {
+                throw new IllegalStateException(
+                        "Video server base URL is not configured: objectId=%s".formatted(objectId)
+                );
+            }
+
+            byte[] image = screenshotClient.download(
+                    videoServerBaseUrl,
+                    objectId,
+                    videoTimestamp
+            );
 
             String fileName = imageFile != null && !imageFile.isBlank()
                     ? imageFile

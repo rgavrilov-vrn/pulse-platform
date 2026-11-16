@@ -95,6 +95,7 @@ public class ApplyTrassirManualIncidentUseCase implements TrassirEventUseCase {
                 reason,
                 videoTimestamp,
                 imageFile,
+                null,
                 occurredAt
         ));
 

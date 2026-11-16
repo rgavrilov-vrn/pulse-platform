@@ -80,6 +80,7 @@ public class CreateIncidentFromManualEventUseCase {
 
         attachScreenshotAfterCommit(
                 incident.getId(),
+                event.videoServerBaseUrl(),
                 event.objectId(),
                 event.videoTimestamp(),
                 event.imageFile()
@@ -102,6 +103,7 @@ public class CreateIncidentFromManualEventUseCase {
 
     private void attachScreenshotAfterCommit(
             UUID incidentId,
+            String videoServerBaseUrl,
             String objectId,
             String videoTimestamp,
             String imageFile
@@ -112,6 +114,7 @@ public class CreateIncidentFromManualEventUseCase {
                 public void afterCommit() {
                     screenshotAttachments.attachScreenshot(
                             incidentId,
+                            videoServerBaseUrl,
                             objectId,
                             videoTimestamp,
                             imageFile
@@ -121,6 +124,7 @@ public class CreateIncidentFromManualEventUseCase {
         } else {
             screenshotAttachments.attachScreenshot(
                     incidentId,
+                    videoServerBaseUrl,
                     objectId,
                     videoTimestamp,
                     imageFile
