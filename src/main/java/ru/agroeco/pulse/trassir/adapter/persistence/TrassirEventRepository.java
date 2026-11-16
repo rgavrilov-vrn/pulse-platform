@@ -1,8 +1,7 @@
 package ru.agroeco.pulse.trassir.adapter.persistence;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,7 +12,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID> {
+public interface TrassirEventRepository
+        extends JpaRepository<TrassirEvent, UUID>,
+        JpaSpecificationExecutor<TrassirEvent> {
 
     @Modifying
     @Query(value = """
@@ -52,20 +53,48 @@ public interface TrassirEventRepository extends JpaRepository<TrassirEvent, UUID
     @Query(value = "SELECT pg_try_advisory_xact_lock(hashtext(:key))", nativeQuery = true)
     Boolean tryAdvisoryLock(@Param("key") String key);
 
+    // ❌ search(...) @Query убран — используется Specification
+
     @Query("""
-            SELECT e FROM TrassirEvent e
-            WHERE (:serverId IS NULL OR e.serverId = :serverId)
-              AND (:eventType IS NULL OR e.eventType = :eventType)
-              AND (:status IS NULL OR e.status = :status)
-              AND (:from IS NULL OR e.createdAt >= :from)
-              AND (:to   IS NULL OR e.createdAt <= :to)
+            SELECT e.status, count(e) FROM TrassirEvent e
+            WHERE e.serverId = coalesce(:serverId, e.serverId)
+            GROUP BY e.status
             """)
-    Page<TrassirEvent> search(@Param("serverId") UUID serverId,
-                              @Param("eventType") String eventType,
-                              @Param("status") String status,
-                              @Param("from") Instant from,
-                              @Param("to") Instant to,
-                              Pageable pageable);
+    List<Object[]> countByStatus(@Param("serverId") UUID serverId);
+
+    @Modifying
+    @Query("""
+        update TrassirEvent e
+           set e.status = 'PENDING',
+               e.retryCount = 0,
+               e.nextRetryAt = :now,
+               e.lastError = null,
+               e.processingError = null
+         where e.id = :id and e.status in ('FAILED','DEAD_LETTER')
+        """)
+    int markForRetry(@Param("id") UUID id, @Param("now") Instant now);
+
+    @Modifying
+    @Query("""
+        update TrassirEvent e
+           set e.status = 'PENDING',
+               e.retryCount = 0,
+               e.nextRetryAt = :now,
+               e.lastError = null,
+               e.processingError = null
+         where e.serverId = coalesce(:serverId, e.serverId)
+           AND e.eventType = coalesce(:eventType, e.eventType)
+           AND (:from IS NULL OR e.createdAt >= :from)
+           AND e.status in ('FAILED','DEAD_LETTER')
+        """)
+    int markForRetryBulk(@Param("serverId") UUID serverId,
+                         @Param("eventType") String eventType,
+                         @Param("from") Instant from,
+                         @Param("now") Instant now);
+
+    @Modifying
+    @Query("delete from TrassirEvent e where e.rawId = :rawId")
+    int deleteByRawId(@Param("rawId") UUID rawId);
 
     @Modifying
     @Query("delete from TrassirEvent event where event.createdAt < :cutoff and event.status in ('PROCESSED','DEAD_LETTER')")

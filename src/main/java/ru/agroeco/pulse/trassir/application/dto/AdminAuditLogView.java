@@ -10,5 +10,10 @@ public record AdminAuditLogView(
         String action,
         String target,
         Map<String, Object> details,
+        String correlationId,
+        String requestId,
+        String status,
+        String errorMessage,
+        Integer affectedCount,
         Instant createdAt
 ) {}

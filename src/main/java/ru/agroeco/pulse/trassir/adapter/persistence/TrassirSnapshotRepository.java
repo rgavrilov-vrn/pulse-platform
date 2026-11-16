@@ -1,9 +1,8 @@
 package ru.agroeco.pulse.trassir.adapter.persistence;
 
 import jakarta.persistence.LockModeType;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,9 +14,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot, UUID> {
+public interface TrassirSnapshotRepository
+        extends JpaRepository<TrassirSnapshot, UUID>,
+        JpaSpecificationExecutor<TrassirSnapshot> {
 
     Optional<TrassirSnapshot> findByServerIdAndExternalSnapshotId(UUID serverId, UUID externalSnapshotId);
+
+    Optional<TrassirSnapshot> findFirstByServerIdAndStatusOrderByCompletedAtDesc(UUID serverId, String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM TrassirSnapshot s WHERE s.id = :id")
@@ -80,19 +83,6 @@ public interface TrassirSnapshotRepository extends JpaRepository<TrassirSnapshot
     int markDeadLetter(@Param("id") UUID id);
 
     long countByStatus(String status);
-
-    @Query("""
-            SELECT s FROM TrassirSnapshot s
-            WHERE (:serverId IS NULL OR s.serverId = :serverId)
-              AND (:status IS NULL OR s.status = :status)
-              AND (:from IS NULL OR s.receivedAt >= :from)
-              AND (:to   IS NULL OR s.receivedAt <= :to)
-            """)
-    Page<TrassirSnapshot> search(@Param("serverId") UUID serverId,
-                                 @Param("status") String status,
-                                 @Param("from") Instant from,
-                                 @Param("to") Instant to,
-                                 Pageable pageable);
 
     @Modifying
     @Query("delete from TrassirSnapshot snapshot")

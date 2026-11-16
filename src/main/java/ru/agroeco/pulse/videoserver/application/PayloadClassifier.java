@@ -15,13 +15,25 @@ public class PayloadClassifier {
 
     private final ObjectMapper mapper;
 
+    public Classification classify(String rawPayload) {
+        try {
+            JsonNode node = mapper.readTree(rawPayload);
+            VideoEventType type = mapSubtype(node.path("type").asString(""));
+            EventSeverity severity = mapSeverity(node.path("severity").asString(""));
+            return new Classification(type, severity);
+        } catch (JacksonException ex) {
+            throw new BusinessRuleException("INVALID_RAW_PAYLOAD: " + ex.getOriginalMessage());
+        }
+    }
+
     public static VideoEventType mapSubtype(String subtype) {
         if (subtype == null || subtype.isBlank()) return VideoEventType.UNKNOWN;
         return switch (subtype.toLowerCase().trim()) {
-            case "motion", "motion_detected"      -> VideoEventType.MOTION_DETECTED;
-            case "offline", "camera_offline"      -> VideoEventType.CAMERA_OFFLINE;
-            case "tamper", "tampering", "camera_tampering" -> VideoEventType.CAMERA_TAMPERING;
-            case "video_event", "video_event_received"     -> VideoEventType.VIDEO_EVENT_RECEIVED;
+            case "motion", "motion_detected"                          -> VideoEventType.MOTION_DETECTED;
+            case "offline", "camera_offline", "connection lost"       -> VideoEventType.CAMERA_OFFLINE;
+            case "tamper", "tampering", "camera_tampering"            -> VideoEventType.CAMERA_TAMPERING;
+            // Событие "Connection Established" не имеет своего типа в enum, используем дефолтный
+            case "connection established"                             -> VideoEventType.VIDEO_EVENT_RECEIVED;
             default -> VideoEventType.VIDEO_EVENT_RECEIVED;
         };
     }
@@ -30,32 +42,8 @@ public class PayloadClassifier {
         if (value == null || value.isBlank()) return EventSeverity.INFO;
         return switch (value.toLowerCase().trim()) {
             case "critical", "tamper" -> EventSeverity.CRITICAL;
-            case "warning", "motion"  -> EventSeverity.WARNING;
-            default                   -> EventSeverity.INFO;
-        };
-    }
-
-    /** @deprecated в trassir-пути subtype/severity уже классифицированы. */
-    @Deprecated
-    public Classification classify(String rawPayload) {
-        try {
-            JsonNode node = mapper.readTree(rawPayload);
-            VideoEventType type = mapType(node.path("type").asString(""));
-            EventSeverity severity = mapSeverity(node.path("severity").asString(""));
-            return new Classification(type, severity);
-        } catch (JacksonException ex) {
-            // защита: до этого места валидация @ValidJson не должна была пропустить
-            throw new BusinessRuleException("INVALID_RAW_PAYLOAD: " + ex.getOriginalMessage());
-        }
-    }
-
-    private VideoEventType mapType(String type) {
-        if (type == null || type.isBlank()) return VideoEventType.UNKNOWN;
-        return switch (type.toLowerCase().trim()) {
-            case "motion", "motion_detected" -> VideoEventType.MOTION_DETECTED;
-            case "offline", "camera_offline" -> VideoEventType.CAMERA_OFFLINE;
-            case "tamper", "tampering", "camera_tampering" -> VideoEventType.CAMERA_TAMPERING;
-            default -> VideoEventType.VIDEO_EVENT_RECEIVED;
+            case "warning", "motion", "connection lost" -> EventSeverity.WARNING;
+            default -> EventSeverity.INFO;
         };
     }
 

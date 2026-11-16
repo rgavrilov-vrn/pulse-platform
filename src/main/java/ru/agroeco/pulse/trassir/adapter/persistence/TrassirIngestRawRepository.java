@@ -7,11 +7,14 @@ import org.springframework.data.repository.query.Param;
 import ru.agroeco.pulse.trassir.domain.TrassirIngestRaw;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TrassirIngestRawRepository extends JpaRepository<TrassirIngestRaw, UUID> {
 
     boolean existsByBatchId(UUID batchId);
+
+    Optional<TrassirIngestRaw> findByBatchId(UUID batchId);
 
     @Modifying
     @Query(value = """
@@ -31,6 +34,10 @@ public interface TrassirIngestRawRepository extends JpaRepository<TrassirIngestR
                        @Param("producerVersion") String producerVersion,
                        @Param("serverId") UUID serverId,
                        @Param("rawBody") String rawBody);
+
+    @Modifying
+    @Query("delete from TrassirIngestRaw r where r.batchId = :batchId")
+    int deleteByBatchId(@Param("batchId") UUID batchId);
 
     @Modifying
     @Query("delete from TrassirIngestRaw raw where raw.createdAt < :cutoff")

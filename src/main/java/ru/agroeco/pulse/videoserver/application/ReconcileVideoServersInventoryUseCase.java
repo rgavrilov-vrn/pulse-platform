@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.trassir.api.event.TrassirObjectsSnapshotReceived;
 import ru.agroeco.pulse.videoserver.adapter.persistence.*;
+import ru.agroeco.pulse.videoserver.application.dto.VideoEventIngestRequest;
 import ru.agroeco.pulse.videoserver.domain.*;
 import ru.agroeco.pulse.videoserver.domain.event.*;
 import tools.jackson.databind.JsonNode;
@@ -29,6 +30,7 @@ public class ReconcileVideoServersInventoryUseCase {
     private final CameraRepository cameras;
     private final ChannelRepository channels;
     private final VideoServerHealthRepository healths;
+    private final IngestVideoEventUseCase ingestVideoEventUseCase; // <-- ДОБАВЛЕНО
     private final EventDispatcher events;
     private final ObjectMapper objectMapper;
 
@@ -130,12 +132,20 @@ public class ReconcileVideoServersInventoryUseCase {
                             .externalId(camera.getExternalId()).cameraName(camera.getName())
                             .connectionStatus(connection).lastSeenAt(seenAt)
                             .occurredAt(seenAt).build());
+
+                    // Сохраняем в normalized_video_events для UI
+                    saveNormalizedEvent(event, camera, "Connection Lost", "WARNING", seenAt);
+
                     camOffline++;
                 } else if (diff.isRecoveryTransition()) {
                     events.dispatch(CameraOnline.builder()
                             .cameraId(camera.getId()).videoServerId(event.serverId())
                             .externalId(camera.getExternalId()).cameraName(camera.getName())
                             .lastSeenAt(seenAt).occurredAt(seenAt).build());
+
+                    // Сохраняем в normalized_video_events для UI
+                    saveNormalizedEvent(event, camera, "Connection Established", "INFO", seenAt);
+
                     camOnline++;
                 } else if (diff.isDegradedTransition()) {
                     events.dispatch(CameraDegraded.builder()
@@ -175,7 +185,6 @@ public class ReconcileVideoServersInventoryUseCase {
             seenChannelKeys.add(obj.objectKey());
 
             String name = textOr(payload, "name", obj.objectKey());
-            // ✅ явный status (если когда-нибудь появится в payload) — иначе null, Channel сам вычислит
             ChannelStatus explicitStatus = parseStatus(textOrNull(payload, "status"));
             Boolean signal = v != null && v.has("signal") ? v.get("signal").asInt() != 0 : null;
             Boolean recordingLocal = v != null && v.has("recording_local") ? v.get("recording_local").asInt() != 0 : null;
@@ -244,7 +253,19 @@ public class ReconcileVideoServersInventoryUseCase {
                 camOffline, camOnline, camDegraded, streamLost, streamRestored, recordingStopped);
     }
 
-    // ---------------------------------------------------------------- helpers
+    private void saveNormalizedEvent(TrassirObjectsSnapshotReceived event, Camera camera, String subtype, String severity, Instant occurredAt) {
+        ingestVideoEventUseCase.handle(new VideoEventIngestRequest(
+                event.serverId(),
+                event.snapshotId(),
+                event.snapshotId() + ":" + camera.getExternalId() + ":" + subtype,
+                camera.getId(),
+                null,
+                occurredAt,
+                "trassir",
+                subtype,
+                severity
+        ));
+    }
 
     private void reconcileServerHealth(UUID serverId, JsonNode serverPayload, Instant seenAt) {
         JsonNode values = serverPayload.get("values");

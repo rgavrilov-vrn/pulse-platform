@@ -12,7 +12,12 @@ public record TrassirSystemEventView(
         Instant occurredAt,
         Instant observedAt,
         String severity,
-        String source,
+        String objectId,
+        String objectName,
+        String p1,
+        String p2,
+        String p3,
         String data,
+        String source,
         Instant createdAt
 ) {}

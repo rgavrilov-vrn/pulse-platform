@@ -15,13 +15,14 @@ import ru.agroeco.pulse.trassir.application.TrassirReadService;
 import ru.agroeco.pulse.trassir.application.dto.TrassirEventView;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/trassir/events")
 @RequiredArgsConstructor
-@Tag(name = "TRASSIR · Read")
+@Tag(name = "TRASSIR · Events", description = "Raw trassir.events (admin)")
 public class TrassirReadEventController {
 
     private static final Set<String> ALLOWED_SORT = Set.of("createdAt", "observedAt", "occurredAt", "id");
@@ -41,5 +42,12 @@ public class TrassirReadEventController {
             @PageableDefault(size = 50, sort = DEFAULT_SORT, direction = Sort.Direction.DESC) Pageable pageable) {
         Pageable safe = QuerySupport.sanitize(pageable, ALLOWED_SORT, DEFAULT_SORT, Sort.Direction.DESC);
         return readService.listEvents(serverId, eventType, status, from, to, safe);
+    }
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('trassir:admin')")
+    @Operation(summary = "Count events by status (для дашборда)")
+    public Map<String, Long> stats(@RequestParam(required = false) UUID serverId) {
+        return readService.eventStatusStats(serverId);
     }
 }

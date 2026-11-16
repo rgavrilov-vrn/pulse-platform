@@ -17,50 +17,30 @@ import java.util.UUID;
 @NoArgsConstructor
 public class TrassirSystemEvent {
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
-    @Column(name = "server_id", nullable = false)
-    private UUID serverId;
+    @Column(name = "server_id", nullable = false)                private UUID serverId;
+    @Column(name = "event_id", nullable = false, unique = true)  private UUID eventId;
+    @Column(name = "event_type", nullable = false)               private String eventType;
+    @Column(name = "event_version", nullable = false)            private String eventVersion;
+    @Column(name = "occurred_at")                                private Instant occurredAt;
+    @Column(name = "observed_at", nullable = false)              private Instant observedAt;
+    @Column(nullable = false)                                    private String severity;
 
-    @Column(name = "event_id", nullable = false, unique = true)
-    private UUID eventId;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false) private String source;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false) private String data;
+    @JdbcTypeCode(SqlTypes.JSON) @Column(name = "raw_event", nullable = false) private String rawEvent;
 
-    @Column(name = "event_type", nullable = false)
-    private String eventType;
+    @Column(name = "object_id",   length = 255) private String objectId;
+    @Column(name = "object_name", length = 255) private String objectName;
+    @Column(name = "p1", columnDefinition = "text") private String p1;
+    @Column(name = "p2", columnDefinition = "text") private String p2;
+    @Column(name = "p3", columnDefinition = "text") private String p3;
 
-    @Column(name = "event_version", nullable = false)
-    private String eventVersion;
-
-    @Column(name = "occurred_at")
-    private Instant occurredAt;
-
-    @Column(name = "observed_at", nullable = false)
-    private Instant observedAt;
-
-    @Column(nullable = false)
-    private String severity;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false)
-    private String source;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false)
-    private String data;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "raw_event", nullable = false)
-    private String rawEvent;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
 
     @PrePersist
     void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        if (createdAt == null) createdAt = Instant.now();
     }
 }

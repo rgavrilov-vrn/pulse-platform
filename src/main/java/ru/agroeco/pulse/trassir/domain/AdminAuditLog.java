@@ -14,36 +14,30 @@ import java.util.UUID;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AdminAuditLog {
 
-    @Id
-    @GeneratedValue
+    @Id @GeneratedValue
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "actor", nullable = false)
-    private String actor;
+    @Column(name = "actor", nullable = false)        private String actor;
+    @Column(name = "action", nullable = false)       private String action;
+    @Column(name = "target", nullable = false)       private String target;
 
-    @Column(name = "action", nullable = false)
-    private String action;
-
-    @Column(name = "target", nullable = false)
-    private String target;
-
-    /**
-     * FIX #85: Map<String, Object> вместо String. Раньше `details` собирался
-     * конкатенацией `"{\"deletedEvents\":" + n + "}"` в TrassirDataPurgeService —
-     * хрупко (сломается на первом String-значении) и не парсится при чтении
-     * (клиент получал JSON-строку внутри JSON-строки).
-     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "details", columnDefinition = "jsonb")
     private Map<String, Object> details;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    @Column(name = "correlation_id", length = 100) private String correlationId;
+    @Column(name = "request_id", length = 100)     private String requestId;
+    @Column(name = "status", nullable = false, length = 32) private String status;
+    @Column(name = "error_message", columnDefinition = "text") private String errorMessage;
+    @Column(name = "affected_count") private Integer affectedCount;
+
+    @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
 
     @PrePersist
     void onCreate() {
         if (id == null) id = UUID.randomUUID();
         if (createdAt == null) createdAt = Instant.now();
+        if (status == null) status = "SUCCESS";
     }
 }
