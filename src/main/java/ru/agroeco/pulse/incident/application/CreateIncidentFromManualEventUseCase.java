@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.agroeco.pulse.incident.adapter.persistence.IncidentContextRefRepository;
 import ru.agroeco.pulse.incident.adapter.persistence.IncidentRepository;
 import ru.agroeco.pulse.incident.adapter.persistence.ViolationCategoryRepository;
@@ -11,6 +13,7 @@ import ru.agroeco.pulse.incident.domain.*;
 import ru.agroeco.pulse.incident.domain.event.IncidentCreated;
 import ru.agroeco.pulse.platform.application.event.EventDispatcher;
 import ru.agroeco.pulse.trassir.api.event.TrassirManualIncidentRequested;
+import ru.agroeco.pulse.trassir.application.TrassirScreenshotAttachmentService;
 import ru.agroeco.pulse.videoserver.api.CameraLookupService;
 
 import java.time.Instant;
@@ -31,6 +34,7 @@ public class CreateIncidentFromManualEventUseCase {
     private final IncidentRepository incidents;
     private final IncidentContextRefRepository contextRefs;
     private final EventDispatcher events;
+    private final TrassirScreenshotAttachmentService screenshotAttachments;
 
     @Transactional
     public void handle(TrassirManualIncidentRequested event) {
@@ -74,6 +78,13 @@ public class CreateIncidentFromManualEventUseCase {
                 incident.getId(), "videoserver", entityType, entityId, true, obj.name()
         ));
 
+        attachScreenshotAfterCommit(
+                incident.getId(),
+                event.objectId(),
+                event.videoTimestamp(),
+                event.imageFile()
+        );
+
         events.dispatch(IncidentCreated.builder()
                 .incidentId(incident.getId())
                 .number(incident.getNumber())
@@ -87,5 +98,33 @@ public class CreateIncidentFromManualEventUseCase {
 
         log.info("Created MANUAL DRAFT incident: id={}, number={}, object={}",
                 incident.getId(), incident.getNumber(), obj.name());
+    }
+
+    private void attachScreenshotAfterCommit(
+            UUID incidentId,
+            String objectId,
+            String videoTimestamp,
+            String imageFile
+    ) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    screenshotAttachments.attachScreenshot(
+                            incidentId,
+                            objectId,
+                            videoTimestamp,
+                            imageFile
+                    );
+                }
+            });
+        } else {
+            screenshotAttachments.attachScreenshot(
+                    incidentId,
+                    objectId,
+                    videoTimestamp,
+                    imageFile
+            );
+        }
     }
 }

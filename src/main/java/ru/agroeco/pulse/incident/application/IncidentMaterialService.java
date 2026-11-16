@@ -181,6 +181,141 @@ public class IncidentMaterialService {
         }
     }
 
+    public MaterialView uploadSystemMaterial(
+            UUID incidentId,
+            String fileName,
+            String mimeType,
+            byte[] content,
+            UUID actorId
+    ) {
+        if (content == null || content.length == 0) {
+            throw error(HttpStatus.BAD_REQUEST, "Empty screenshot");
+        }
+        if (content.length > maxBytes) {
+            throw error(HttpStatus.CONTENT_TOO_LARGE, "Screenshot size limit exceeded");
+        }
+
+        String name = normalizeSystemFileName(fileName);
+        String extension = extractExtension(name);
+        String detectedMime = TYPES.get(extension);
+
+        if (detectedMime == null) {
+            throw error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported screenshot extension");
+        }
+
+        String finalMime = mimeType == null || mimeType.isBlank() ? detectedMime : mimeType;
+        String kind = finalMime.startsWith("image/") ? "IMAGE" : "DOCUMENT";
+        UUID assetId = UUID.randomUUID();
+        String storageKey = assetId.toString();
+        Path target = root.resolve(storageKey);
+        Path temporary = null;
+
+        try {
+            temporary = Files.createTempFile(root, "trassir-screenshot-", ".tmp");
+
+            try (OutputStream output = Files.newOutputStream(temporary)) {
+                output.write(content);
+            }
+
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException exception) {
+                Files.move(temporary, target);
+            }
+            temporary = null;
+
+            String finalName = name;
+            long size = content.length;
+            String sha256 = sha256(content);
+            Instant uploadedAt = Instant.now();
+
+            return transactions.execute(transaction -> {
+                requireIncident(incidentId, true, false);
+
+                jdbc.update("""
+                        INSERT INTO incident.media_assets
+                        (id, storage_provider, storage_key, file_name, mime_type,
+                         file_extension, size_bytes, sha256, material_type,
+                         uploaded_at, uploaded_by)
+                        VALUES (?, 'LOCAL', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        assetId, storageKey, finalName, finalMime, extension,
+                        size, sha256, kind,
+                        java.sql.Timestamp.from(uploadedAt), actorId
+                );
+
+                jdbc.update("""
+                        INSERT INTO incident.incident_materials
+                        (incident_id, media_asset_id, role, created_by)
+                        VALUES (?, ?, 'ADDITIONAL_EVIDENCE', ?)
+                        """,
+                        incidentId, assetId, actorId
+                );
+
+                events.dispatch(IncidentMaterialUploaded.builder()
+                        .incidentId(incidentId)
+                        .materialId(assetId)
+                        .fileName(finalName)
+                        .mimeType(finalMime)
+                        .sizeBytes(size)
+                        .actorId(actorId)
+                        .occurredAt(uploadedAt)
+                        .build());
+
+                log.info("System material attached: incidentId={}, materialId={}, actorId={}, bytes={}, sha256={}",
+                        incidentId, assetId, actorId, size, sha256);
+
+                return new MaterialView(
+                        assetId,
+                        finalName,
+                        finalMime,
+                        size,
+                        kind,
+                        "ADDITIONAL_EVIDENCE",
+                        uploadedAt,
+                        "api/v1/incidents/" + incidentId + "/materials/" + assetId + "/download"
+                );
+            });
+        } catch (IOException | RuntimeException exception) {
+            cleanup(target);
+            throw exception;
+        } finally {
+            if (temporary != null) {
+                cleanup(temporary);
+            }
+        }
+    }
+
+    private String normalizeSystemFileName(String fileName) {
+        String name = fileName == null || fileName.isBlank()
+                ? "trassir-screenshot.jpg"
+                : fileName;
+
+        name = name.replace('\\', '/');
+        name = name.substring(name.lastIndexOf('/') + 1)
+                .replaceAll("[\\p{Cntrl}]", "_");
+
+        if (name.isBlank()) {
+            name = "trassir-screenshot.jpg";
+        }
+
+        return name.length() > 255 ? name.substring(0, 255) : name;
+    }
+
+    private String extractExtension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        return dot < 0 ? "" : fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String sha256(byte[] content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(content));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
     private void cleanup(Path path) {
         try { Files.deleteIfExists(path); }
         catch (IOException exception) { log.error("Storage cleanup failed for {}", path, exception); }
